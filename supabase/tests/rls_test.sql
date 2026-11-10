@@ -36,3 +36,22 @@ select status = 'in_progress' as untouched from sessions where id = :'a_session'
 delete from auth.users where id = 'aaaaaaaa-0000-0000-0000-000000000001';
 select (select count(*) from sessions) + (select count(*) from messages) + (select count(*) from events) = 0 as cascaded \gset
 \if :cascaded \echo 'PASS account delete cascades' \else \echo 'FAIL' \quit \endif
+
+-- complete_session: 본인만 완성 가능, 두 번은 불가
+insert into auth.users values ('cccccccc-0000-0000-0000-000000000003');
+set role authenticated;
+select set_config('request.jwt.claim.sub', 'cccccccc-0000-0000-0000-000000000003', false) \gset
+insert into sessions (seed_word) values ('산책') returning id as c_session \gset
+select (complete_session(:'c_session', '오늘은 산책을 했다.')).id is not null as completed \gset
+\if :completed \echo 'PASS complete_session works' \else \echo 'FAIL' \quit \endif
+select status = 'completed' as st from sessions where id = :'c_session' \gset
+\if :st \echo 'PASS status completed' \else \echo 'FAIL' \quit \endif
+select count(*) = 1 as ev from events where type = 'diary_completed' \gset
+\if :ev \echo 'PASS diary_completed event' \else \echo 'FAIL' \quit \endif
+\set ON_ERROR_STOP off
+select complete_session(:'c_session', '두 번째');
+select set_config('request.jwt.claim.sub', 'bbbbbbbb-0000-0000-0000-000000000002', false) \gset
+select complete_session(:'c_session', '남의 것');
+\set ON_ERROR_STOP on
+\echo 'PASS (already_completed and not_found errors above are expected)'
+reset role;
