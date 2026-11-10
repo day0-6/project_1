@@ -72,7 +72,10 @@ returns trigger
 language plpgsql
 as $$
 begin
-  new.updated_at := now();
+  -- 명시적으로 바꾼 값(시드 등)은 존중하고, 그 외에는 now()
+  if new.updated_at is not distinct from old.updated_at then
+    new.updated_at := now();
+  end if;
   return new;
 end;
 $$;

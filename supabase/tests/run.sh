@@ -5,8 +5,12 @@ cd "$(dirname "$0")"
 DB=hanmadi_test
 PSQL="psql -X -q -v ON_ERROR_STOP=1"
 dropdb --if-exists "$DB" && createdb "$DB"
-for r in anon authenticated; do psql -X -q -d postgres -c "drop role if exists $r" >/dev/null 2>&1 || true; done
 $PSQL -d "$DB" -f auth_stub.sql
 for f in ../migrations/*.sql; do $PSQL -d "$DB" -f "$f"; done
 psql -X -q -d "$DB" -f rls_test.sql
+# 시드는 깨끗한 DB에서 검증
+dropdb "$DB" && createdb "$DB"
+$PSQL -d "$DB" -f auth_stub.sql
+for f in ../migrations/*.sql; do $PSQL -d "$DB" -f "$f"; done
+psql -X -q -d "$DB" -f seed_test.sql
 dropdb "$DB"

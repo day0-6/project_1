@@ -35,4 +35,15 @@ export async function seedDemoData(repo: Repository): Promise<void> {
     await repo.addMessage(paused.id, role, content);
   }
   await repo.logEvent("session_started");
+
+  // 단어 하나만 남기고 멈춘 세션 (그것도 실패가 아님)
+  const wordOnly = await repo.createSession("고양이");
+  for (const [role, content] of [
+    ["ai", OPENING_QUESTION],
+    ["user", "고양이"],
+    ["ai", "'고양이' 하면 누가 같이 떠올라?"],
+  ] as const) {
+    await repo.addMessage(wordOnly.id, role, content);
+  }
+  await repo.logEvent("session_started");
 }
