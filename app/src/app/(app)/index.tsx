@@ -71,6 +71,6 @@ const styles = StyleSheet.create({
   links: { flexDirection: "row", justifyContent: "flex-end", gap: space.md },
   body: { flex: 1, justifyContent: "center" },
   row: { flexDirection: "row", gap: space.sm },
-  input: { flex: 1 },
+  input: { flex: 1, minWidth: 0 },
   footer: { alignItems: "center" },
 });

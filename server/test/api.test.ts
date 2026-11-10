@@ -4,7 +4,7 @@ import { MockQuestioner } from "../src/ai/mock.js";
 import type { Questioner } from "../src/ai/types.js";
 import { createApp } from "../src/app.js";
 import { OPENING_QUESTION } from "../src/domain.js";
-import { memoryAuthenticator, MemoryStore } from "./memoryRepo.js";
+import { memoryAuthenticator, MemoryStore } from "../src/repo/memory.js";
 
 const A = { Authorization: "Bearer token-user-a" };
 const B = { Authorization: "Bearer token-user-b" };

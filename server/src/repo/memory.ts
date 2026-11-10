@@ -1,6 +1,9 @@
+/**
+ * 메모리 저장소 — 테스트와 로컬 데모(scripts/demo.ts) 전용. 운영 서버(src/index.ts)에서는 쓰지 않는다.
+ */
 import { randomUUID } from "node:crypto";
-import type { Diary, DiaryWithSeed, EventType, Message, MessageRole, Session, SessionStatus, SessionSummary } from "../src/domain.js";
-import { SessionAlreadyCompletedError, type Authenticator, type Repository } from "../src/repo/types.js";
+import type { Diary, DiaryWithSeed, EventType, Message, MessageRole, Session, SessionStatus, SessionSummary } from "../domain.js";
+import { SessionAlreadyCompletedError, type Authenticator, type Repository } from "./types.js";
 
 /** 테스트용 저장소. 사용자별로 걸러서 RLS를 흉내 낸다. */
 export class MemoryStore {
@@ -38,6 +41,7 @@ export class MemoryRepository implements Repository {
   async listSessions(status?: SessionStatus): Promise<SessionSummary[]> {
     return this.store.sessions
       .filter((s) => s.user_id === this.userId && (!status || s.status === status))
+      .sort((a, b) => b.updated_at.localeCompare(a.updated_at))
       .map((s) => {
         const answers = this.store.messages.filter((m) => m.session_id === s.id && m.role === "user");
         return { ...s, answer_count: Math.max(answers.length - 1, 0), last_answer: answers.length > 1 ? (answers.at(-1)?.content ?? null) : null };
@@ -68,7 +72,10 @@ export class MemoryRepository implements Repository {
     return { ...d, seed_word: this.store.sessions.find((s) => s.id === d.session_id)?.seed_word ?? "" };
   }
   async listDiaries() {
-    return this.store.diaries.filter((d) => d.user_id === this.userId).map((d) => this.withSeed(d));
+    return this.store.diaries
+      .filter((d) => d.user_id === this.userId)
+      .sort((a, b) => b.created_at.localeCompare(a.created_at))
+      .map((d) => this.withSeed(d));
   }
   async getDiary(id: string) {
     const d = this.store.diaries.find((x) => x.id === id && x.user_id === this.userId);

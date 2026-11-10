@@ -50,6 +50,7 @@ export default function ChatScreen() {
             renderItem={({ item }) => <Bubble role={item.role} content={item.content} />}
             contentContainerStyle={styles.list}
             onContentSizeChange={() => list.current?.scrollToEnd({ animated: true })}
+            onLayout={() => list.current?.scrollToEnd({ animated: false })}
             ListFooterComponent={c.sending ? <Text style={styles.thinking}>{copy.thinking}</Text> : undefined}
           />
           <View style={styles.bottom}>
@@ -91,6 +92,6 @@ const styles = StyleSheet.create({
   bottom: { paddingHorizontal: space.md, paddingTop: space.sm, borderTopWidth: 1, borderTopColor: colors.border },
   hint: { color: colors.subtle, fontSize: font.small, marginBottom: space.sm },
   row: { flexDirection: "row", gap: space.sm, alignItems: "flex-end" },
-  input: { flex: 1, maxHeight: 120 },
+  input: { flex: 1, minWidth: 0, maxHeight: 120 },
   finish: { paddingHorizontal: space.md, paddingVertical: space.sm },
 });

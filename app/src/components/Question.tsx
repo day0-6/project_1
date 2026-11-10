@@ -4,7 +4,7 @@ import { colors, font, space } from "@/lib/theme";
 /** 모든 화면의 시작점이 되는 질문 한 줄 */
 export function Question({ children }: { children: string }) {
   return (
-    <Text accessibilityRole="header" style={styles.text}>
+    <Text accessibilityRole="header" lineBreakStrategyIOS="hangul-word" style={styles.text}>
       {children}
     </Text>
   );

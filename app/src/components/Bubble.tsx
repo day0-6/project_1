@@ -5,7 +5,7 @@ export function Bubble({ role, content }: { role: "ai" | "user"; content: string
   const isAi = role === "ai";
   return (
     <View style={[styles.bubble, isAi ? styles.ai : styles.user]}>
-      <Text style={[styles.text, isAi && styles.aiText]}>{content}</Text>
+      <Text lineBreakStrategyIOS="hangul-word" style={[styles.text, isAi && styles.aiText]}>{content}</Text>
     </View>
   );
 }
