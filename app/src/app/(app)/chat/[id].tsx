@@ -1,6 +1,6 @@
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import { useRef, useState } from "react";
-import { FlatList, StyleSheet, Text, View } from "react-native";
+import { FlatList, Platform, StyleSheet, Text, View } from "react-native";
 import { Bubble } from "@/components/Bubble";
 import { Button } from "@/components/Button";
 import { Loading } from "@/components/Centered";
@@ -9,6 +9,7 @@ import { Field } from "@/components/Field";
 import { Notice } from "@/components/Notice";
 import { Screen } from "@/components/Screen";
 import { copy } from "@/lib/copy";
+import { handleEnterToSend } from "@/lib/enterToSend";
 import { colors, font, space } from "@/lib/theme";
 import type { Message } from "@/lib/types";
 import { useConversation } from "@/lib/useConversation";
@@ -20,6 +21,7 @@ export default function ChatScreen() {
   const list = useRef<FlatList<Message>>(null);
 
   async function send(text: string) {
+    if (!text.trim() || c.sending) return;
     setInput("");
     const ok = await c.send(text);
     if (!ok) setInput(text); // 실패해도 쓴 글은 그대로
@@ -67,6 +69,7 @@ export default function ChatScreen() {
                 accessibilityLabel={copy.answerPlaceholder}
                 style={styles.input}
                 onSubmitEditing={() => send(input)}
+                onKeyPress={Platform.OS === "web" ? (e) => handleEnterToSend(e, () => send(input)) : undefined}
                 submitBehavior="submit"
                 returnKeyType="send"
               />
