@@ -161,7 +161,11 @@ export function createSupabaseAuthenticator(url: string, anonKey: string): Authe
   return async (accessToken) => {
     const db = createUserClient(url, anonKey, accessToken);
     const { data, error } = await db.auth.getUser(accessToken);
-    if (error || !data.user) return null;
+    if (error || !data.user) {
+      // 토큰 내용은 남기지 않고 원인만 기록
+      console.warn(`[auth] 토큰 확인 실패: ${error?.status ?? ""} ${error?.message ?? "user 없음"}`);
+      return null;
+    }
     return { userId: data.user.id, repo: new SupabaseRepository(db) };
   };
 }
