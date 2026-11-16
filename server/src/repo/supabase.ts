@@ -1,4 +1,4 @@
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { createClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import type { Diary, DiaryWithSeed, EventType, Message, MessageRole, Session, SessionStatus, SessionSummary } from "../domain.js";
 import { SessionAlreadyCompletedError, type Authenticator, type Repository } from "./types.js";
@@ -32,6 +32,20 @@ const DiaryWithSessionRow = DiaryRow.extend({
   sessions: z.object({ seed_word: z.string() }).nullable(),
 });
 
+/** 한 마디 테이블이 있는 Postgres 스키마 */
+export const DB_SCHEMA = "hanmadi";
+
+/** 사용자 토큰으로 접근하는 클라이언트. RLS가 그대로 적용된다. */
+function createUserClient(url: string, anonKey: string, accessToken: string) {
+  return createClient(url, anonKey, {
+    global: { headers: { Authorization: `Bearer ${accessToken}` } },
+    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+    // 같은 Supabase 프로젝트의 다른 앱과 겹치지 않도록 별도 스키마를 쓴다 (supabase/migrations 참고)
+    db: { schema: DB_SCHEMA },
+  });
+}
+type UserClient = ReturnType<typeof createUserClient>;
+
 type PgError = { message: string; code?: string };
 
 function fail(op: string, error: PgError): never {
@@ -45,7 +59,7 @@ function toDiaryWithSeed(row: z.infer<typeof DiaryWithSessionRow>): DiaryWithSee
 }
 
 export class SupabaseRepository implements Repository {
-  constructor(private readonly db: SupabaseClient) {}
+  constructor(private readonly db: UserClient) {}
 
   async createSession(seedWord: string): Promise<Session> {
     const { data, error } = await this.db.from("sessions").insert({ seed_word: seedWord }).select().single();
@@ -145,10 +159,7 @@ export class SupabaseRepository implements Repository {
  */
 export function createSupabaseAuthenticator(url: string, anonKey: string): Authenticator {
   return async (accessToken) => {
-    const db = createClient(url, anonKey, {
-      global: { headers: { Authorization: `Bearer ${accessToken}` } },
-      auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
-    });
+    const db = createUserClient(url, anonKey, accessToken);
     const { data, error } = await db.auth.getUser(accessToken);
     if (error || !data.user) return null;
     return { userId: data.user.id, repo: new SupabaseRepository(db) };

@@ -54,7 +54,9 @@ npm run web
 
 ### 1. Supabase
 1. 프로젝트를 만든다.
-2. SQL Editor에서 `supabase/migrations/`의 파일을 이름 순서대로 실행한다. Supabase CLI를 쓴다면 `supabase db push`.
+2. SQL Editor에서 `supabase/migrations/`의 파일을 이름 순서대로, **파일마다 새 snippet에서** 실행한다. Supabase CLI를 쓴다면 `supabase db push`.
+   - 모든 테이블은 `hanmadi` 스키마에 만든다. 다른 앱이 쓰는 프로젝트(`public.diaries` 등이 이미 있는 경우)에서도 겹치지 않는다.
+   - **Project Settings → Data API → Exposed schemas**에 `hanmadi`를 추가하고 저장한다. 안 하면 서버가 테이블을 찾지 못한다.
 3. Authentication → Email을 켠다. 개발 중에는 이메일 확인을 꺼 두면 바로 로그인할 수 있다.
 4. (시연용) 앱에서 `demo@hanmadi.app`로 가입한 뒤 SQL Editor에서 `supabase/seed.sql`을 실행한다.
 

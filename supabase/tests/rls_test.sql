@@ -1,5 +1,6 @@
 -- RLS 검증: 사용자 A/B가 서로의 데이터를 볼 수 없어야 한다
 \set ON_ERROR_STOP on
+set search_path = hanmadi, public;
 insert into auth.users values ('aaaaaaaa-0000-0000-0000-000000000001'), ('bbbbbbbb-0000-0000-0000-000000000002');
 
 set role authenticated;
@@ -26,7 +27,7 @@ insert into sessions (user_id, seed_word) values ('aaaaaaaa-0000-0000-0000-00000
 
 set role anon;
 \set ON_ERROR_STOP off
-select count(*) from sessions;
+select count(*) from hanmadi.sessions;
 \set ON_ERROR_STOP on
 \echo 'PASS (permission denied above is expected for anon)'
 

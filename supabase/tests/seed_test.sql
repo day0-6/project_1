@@ -1,4 +1,5 @@
 \set ON_ERROR_STOP on
+set search_path = hanmadi, public;
 insert into auth.users (id, email) values ('dddddddd-0000-0000-0000-000000000004', 'demo@hanmadi.app');
 \i ../seed.sql
 \i ../seed.sql
