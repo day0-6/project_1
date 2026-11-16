@@ -91,8 +91,9 @@ const log = (...a) => console.log('✓', ...a);
     await p.getByText('우산 없이 뛰었어').waitFor();
     await shot(p, '06-archive'); log('보관함에 미완성 세션 카드 (비, 버스)');
     await p.getByText('우산 없이 뛰었어').click();
-    await p.getByText('우산 없이 뛰었어', { exact: true }).waitFor();
     await p.getByLabel('한 마디만 적어도 돼').waitFor();
+    // 웹에서는 뒤의 보관함 화면도 DOM에 남아 있어 같은 문장이 2개 → 대화 말풍선(마지막)을 확인
+    await p.getByText('우산 없이 뛰었어', { exact: true }).last().waitFor();
     log('카드 탭 → 대화 이어 하기');
 
     // 8. 로그아웃 → 로그인 화면
