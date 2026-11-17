@@ -1,4 +1,4 @@
-import { ApiError, GoogleGenAI } from "@google/genai";
+import { ApiError, GoogleGenAI, ThinkingLevel } from "@google/genai";
 import { pickPresetQuestion, type Rng } from "./fallback.js";
 import { buildPrompt, RESPONSE_JSON_SCHEMA, SYSTEM_INSTRUCTION } from "./prompt.js";
 import { sanitizeModelText } from "./sanitize.js";
@@ -22,7 +22,9 @@ export function createGenaiGenerate(apiKey: string): GenerateFn {
         responseMimeType: "application/json",
         responseJsonSchema: RESPONSE_JSON_SCHEMA,
         temperature: 0.8,
-        maxOutputTokens: 1024,
+        maxOutputTokens: 2048,
+        // 짧은 질문 하나라 깊게 생각할 필요가 없다. Gemini 3 이상은 생각을 최소로 해서 빨리 답하게 한다.
+        ...(/^gemini-[3-9]/.test(model) ? { thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL } } : {}),
         abortSignal: signal,
       },
     });
