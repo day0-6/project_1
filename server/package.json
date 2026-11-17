@@ -8,7 +8,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "demo": "tsx scripts/demo.ts",
-    "models": "tsx --env-file-if-exists=.env scripts/listModels.ts"
+    "models": "tsx --env-file-if-exists=.env scripts/listModels.ts",
+    "ai-test": "tsx --env-file-if-exists=.env scripts/aiTest.ts"
   },
   "dependencies": {
     "@google/genai": "^3.0.0",

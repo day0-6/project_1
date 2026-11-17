@@ -13,8 +13,11 @@ export type GenerateFn = (args: {
 
 export function createGenaiGenerate(apiKey: string): GenerateFn {
   const ai = new GoogleGenAI({ apiKey });
-  return async ({ model, prompt, signal }) => {
-    const res = await ai.models.generateContent({
+  // 짧은 질문 하나라 깊게 생각할 필요가 없다. Gemini 3 이상은 생각을 최소로 해서 빨리 답하게 한다.
+  // 모델이 이 설정을 거부(400)하면 그다음부터는 빼고 보낸다.
+  let minimalThinking = true;
+  const call = (model: string, prompt: string, signal: AbortSignal, thinking: boolean) =>
+    ai.models.generateContent({
       model,
       contents: prompt,
       config: {
@@ -23,12 +26,20 @@ export function createGenaiGenerate(apiKey: string): GenerateFn {
         responseJsonSchema: RESPONSE_JSON_SCHEMA,
         temperature: 0.8,
         maxOutputTokens: 2048,
-        // 짧은 질문 하나라 깊게 생각할 필요가 없다. Gemini 3 이상은 생각을 최소로 해서 빨리 답하게 한다.
-        ...(/^gemini-[3-9]/.test(model) ? { thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL } } : {}),
+        ...(thinking ? { thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL } } : {}),
         abortSignal: signal,
       },
     });
-    return res.text;
+  return async ({ model, prompt, signal }) => {
+    const thinking = minimalThinking && /^gemini-[3-9]/.test(model);
+    try {
+      return (await call(model, prompt, signal, thinking)).text;
+    } catch (err) {
+      if (!(thinking && err instanceof ApiError && err.status === 400)) throw err;
+      minimalThinking = false;
+      console.warn("[ai] 이 모델은 생각 최소화 설정을 받지 않아서 빼고 다시 보냄");
+      return (await call(model, prompt, signal, false)).text;
+    }
   };
 }
 
@@ -49,7 +60,9 @@ export class GeminiQuestioner implements Questioner {
     } catch (err) {
       // 429, 네트워크 오류, 타임아웃 등 — 사용자에게는 에러를 보이지 않는다
       const status = err instanceof ApiError ? err.status : controller.signal.aborted ? "timeout" : "network";
-      log(`[ai] Gemini 호출 실패(${status}) — 미리 정한 질문으로 대체`);
+      // 구글 오류 설명은 설정 문제를 알려 줄 뿐 사용자 글은 담지 않는다. 길면 자른다.
+      const reason = err instanceof ApiError ? ` ${err.message.slice(0, 200)}` : "";
+      log(`[ai] Gemini 호출 실패(${status})${reason} — 미리 정한 질문으로 대체`);
     } finally {
       clearTimeout(timer);
     }
