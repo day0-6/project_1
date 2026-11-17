@@ -45,15 +45,36 @@ export function createGenaiGenerate(apiKey: string): GenerateFn {
 
 type Options = { model: string; timeoutMs: number; generate: GenerateFn; rng?: Rng; log?: (msg: string) => void };
 
+/** 붐비거나 느렸던 모델은 이 시간 동안 순서를 뒤로 미룬다 */
+const COOLDOWN_MS = 2 * 60 * 1000;
+
 export class GeminiQuestioner implements Questioner {
+  /** 모델 이름 → 이 시각까지 뒤로 미룸 */
+  private readonly coolingUntil = new Map<string, number>();
+
   constructor(private readonly opts: Options) {}
+
+  /** 설정 순서를 지키되, 최근에 실패한 모델은 맨 뒤로 */
+  private orderedModels(now: number): string[] {
+    const all = modelList(this.opts.model);
+    const ready = all.filter((m) => (this.coolingUntil.get(m) ?? 0) <= now);
+    return [...ready, ...all.filter((m) => !ready.includes(m))];
+  }
 
   async nextQuestion(input: QuestionInput): Promise<AiTurn> {
     const { rng = Math.random, log = console.warn } = this.opts;
     const prompt = buildPrompt(input);
-    for (const model of modelList(this.opts.model)) {
-      const result = await this.tryModel(model, prompt, log);
-      if (result === "next") continue; // 붐빔(503)·한도(429)·없음(404) → 다음 모델
+    // 모델을 여러 개 시도해도 사용자가 너무 오래 기다리지 않게 전체 시간을 제한한다
+    const deadline = Date.now() + this.opts.timeoutMs * 2;
+    for (const model of this.orderedModels(Date.now())) {
+      const remaining = deadline - Date.now();
+      if (remaining <= 500) break;
+      const result = await this.tryModel(model, prompt, log, Math.min(this.opts.timeoutMs, remaining));
+      if (result === "next") {
+        // 붐빔(503)·한도(429)·없음(404)·시간 초과 → 잠시 뒤로 미루고 다음 모델
+        this.coolingUntil.set(model, Date.now() + COOLDOWN_MS);
+        continue;
+      }
       if (result) return result;
       break;
     }
@@ -61,9 +82,9 @@ export class GeminiQuestioner implements Questioner {
   }
 
   /** 성공하면 질문, 다음 모델을 써 볼 만하면 "next", 그 밖의 실패는 null */
-  private async tryModel(model: string, prompt: string, log: (msg: string) => void): Promise<AiTurn | "next" | null> {
+  private async tryModel(model: string, prompt: string, log: (msg: string) => void, timeoutMs: number): Promise<AiTurn | "next" | null> {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), this.opts.timeoutMs);
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
       const text = await this.opts.generate({ model, prompt, signal: controller.signal });
       const clean = sanitizeModelText(text);
@@ -76,7 +97,7 @@ export class GeminiQuestioner implements Questioner {
       // 구글 오류 설명은 설정 문제를 알려 줄 뿐 사용자 글은 담지 않는다. 길면 자른다.
       const reason = err instanceof ApiError ? ` ${err.message.slice(0, 160)}` : "";
       log(`[ai] ${model} 호출 실패(${status})${reason}`);
-      return typeof status === "number" && RETRY_NEXT.has(status) ? "next" : null;
+      return status === "timeout" || (typeof status === "number" && RETRY_NEXT.has(status)) ? "next" : null;
     } finally {
       clearTimeout(timer);
     }

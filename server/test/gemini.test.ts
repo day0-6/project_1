@@ -152,3 +152,27 @@ describe("모델 여러 개", () => {
     expect((await q.nextQuestion(input)).source).toBe("fallback");
   });
 });
+
+describe("느리거나 붐빈 모델", () => {
+  it("시간 초과도 다음 모델로 넘어가고, 다음 질문부터는 그 모델을 뒤로 미룬다", async () => {
+    const tried: string[] = [];
+    const q = new GeminiQuestioner({
+      model: "slow-model,ok-model",
+      timeoutMs: 1000,
+      rng: () => 0,
+      log: silent,
+      generate: ({ model, signal }) => {
+        tried.push(model);
+        if (model === "slow-model") {
+          return new Promise((_, reject) => signal.addEventListener("abort", () => reject(new Error("aborted"))));
+        }
+        return Promise.resolve(JSON.stringify({ reaction: "", question: "그다음엔 뭐 했어?", choices: [] }));
+      },
+    });
+    expect((await q.nextQuestion(input)).source).toBe("gemini");
+    expect(tried).toEqual(["slow-model", "ok-model"]);
+    tried.length = 0;
+    await q.nextQuestion(input);
+    expect(tried).toEqual(["ok-model"]);
+  });
+});
