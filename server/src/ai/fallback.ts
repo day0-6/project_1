@@ -21,9 +21,24 @@ const FOLLOW_UP_QUESTIONS: ReadonlyArray<Preset> = [
   { question: "그중에 제일 오래 기억날 것 같은 건 뭐야?", choices: [] },
 ];
 
-/** 미리 정한 공감 한마디. 어떤 답에도 어색하지 않게 중립적으로. */
-const FIRST_REACTIONS = ["좋아 🙂", "오 그렇구나", "응응 알겠어"];
-const FOLLOW_UP_REACTIONS = ["그랬구나", "아하", "응응", "오호", "그랬어"];
+/**
+ * 짧은 답(단어 하나 정도)은 그 말을 그대로 받아서 묻는다. 답을 읽은 것처럼 이어지게.
+ * 미리 정한 질문에는 공감 한마디를 붙이지 않는다 — 답을 모르고 하는 공감은 빈말이 되기 때문.
+ */
+const ECHO_QUESTIONS: ReadonlyArray<(answer: string) => Preset> = [
+  (a) => ({ question: `'${a}', 거기서 뭐가 제일 기억나?`, choices: [] }),
+  (a) => ({ question: `'${a}' 하니까 어떤 장면이 떠올라?`, choices: [] }),
+  (a) => ({ question: `'${a}' 얘기 조금만 더 해 줄래?`, choices: [] }),
+];
+const MAX_ECHO_LENGTH = 10;
+
+/** 따옴표 안에 넣어도 자연스러운 짧은 답이면 돌려준다 */
+function echoable(answer: string | undefined): string | null {
+  const a = (answer ?? "").replace(/['"‘’“”]/g, "").trim();
+  if (a.length === 0 || a.length > MAX_ECHO_LENGTH) return null;
+  if (/[?!.,~…]/.test(a) || a.split(/\s+/).length > 2) return null;
+  return a;
+}
 
 export type Rng = () => number;
 
@@ -62,10 +77,13 @@ export function pickPresetQuestion(
   const turn = answerCount(input);
   // 첫 user 메시지는 시작 단어 → 그 직후에는 시작 단어를 활용한 질문
   const isFirst = turn <= 1;
-  const presets = isFirst ? FIRST_QUESTIONS.map((f) => f(input.seedWord)) : [...FOLLOW_UP_QUESTIONS];
+  const lastAnswer = echoable([...input.history].reverse().find((m) => m.role === "user")?.content);
+  const presets = isFirst
+    ? FIRST_QUESTIONS.map((f) => f(input.seedWord))
+    : lastAnswer
+      ? ECHO_QUESTIONS.map((f) => f(lastAnswer))
+      : [...FOLLOW_UP_QUESTIONS];
   const index = rng ? Math.floor(rng() * presets.length) : turn;
   const picked = pickUnused(presets, asked, index);
-  const reactions = isFirst ? FIRST_REACTIONS : FOLLOW_UP_REACTIONS;
-  const reaction = reactions[Math.abs(index) % reactions.length] ?? "";
-  return { reaction, question: picked.question, choices: [...picked.choices], source };
+  return { reaction: "", question: picked.question, choices: [...picked.choices], source };
 }

@@ -62,7 +62,7 @@ describe("sanitizeTurn", () => {
 describe("cleanReaction: 짧은 공감 한마디만", () => {
   it("짧은 공감은 통과", () => {
     expect(cleanReaction("헉 진짜 정신없었겠다")).toBe("헉 진짜 정신없었겠다");
-    expect(cleanReaction("아 그랬구나 🥲")).toBe("아 그랬구나 🥲");
+    expect(cleanReaction("동아리까지 했구나 🥲")).toBe("동아리까지 했구나 🥲");
   });
   it("질문, 긴 글, 여러 문장, 조언·판단·일기 문장 제안은 버린다", () => {
     expect(cleanReaction("그랬구나?")).toBeNull();
@@ -71,6 +71,9 @@ describe("cleanReaction: 짧은 공감 한마디만", () => {
     expect(cleanReaction("오늘은 푹 쉬어야 해")).toBeNull();
     expect(cleanReaction("잘했어 정말")).toBeNull();
     expect(cleanReaction("이렇게 써 볼까")).toBeNull();
+    expect(cleanReaction("응응")).toBeNull();
+    expect(cleanReaction("아 그렇구나!")).toBeNull();
+    expect(cleanReaction("오호 🙂")).toBeNull();
   });
   it("공감이 규칙에 안 맞으면 질문은 살리고 공감만 버린다", () => {
     const turn = sanitizeTurn({ reaction: "푹 쉬는 게 좋아", question: "오늘 제일 바빴던 순간은 언제야?", choices: [] });

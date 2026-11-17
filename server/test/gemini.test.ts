@@ -88,3 +88,33 @@ describe("buildPrompt", () => {
     expect(p).toContain("사용자: 손님이 많았어");
   });
 });
+
+describe("미리 정한 질문", () => {
+  it("짧은 답은 그 말을 넣어 묻고, 빈 공감은 붙이지 않는다", async () => {
+    const q = new MockQuestioner();
+    const turn = await q.nextQuestion({
+      seedWord: "학교",
+      history: [
+        { role: "ai", content: "오늘 가장 기억에 남는 단어 하나만 알려줄래?" },
+        { role: "user", content: "학교" },
+        { role: "ai", content: "'학교', 그때 어디에 있었어?" },
+        { role: "user", content: "동아리방" },
+      ],
+    });
+    expect(turn.reaction).toBe("");
+    expect(turn.question).toContain("'동아리방'");
+  });
+  it("긴 답에는 따옴표로 되풀이하지 않는다", async () => {
+    const q = new MockQuestioner();
+    const turn = await q.nextQuestion({
+      seedWord: "학교",
+      history: [
+        { role: "ai", content: "오늘 가장 기억에 남는 단어 하나만 알려줄래?" },
+        { role: "user", content: "학교" },
+        { role: "ai", content: "'학교', 그때 어디에 있었어?" },
+        { role: "user", content: "수업 듣고 동아리도 하고 할 게 많아서 바빴어" },
+      ],
+    });
+    expect(turn.question).not.toContain("'");
+  });
+});

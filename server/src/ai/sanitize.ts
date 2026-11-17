@@ -67,9 +67,18 @@ export function cleanQuestion(raw: string): string | null {
  * 공감 한마디. 질문이 아니고(물음표 없음), 짧고, 금지 표현이 없어야 한다.
  * 규칙에 안 맞으면 질문은 살리고 공감만 버린다.
  */
+/** 아무 답에나 붙는 빈말. 이것만 있으면 공감이 아니라서 버린다. */
+const FILLER = new Set(["아", "어", "응", "응응", "음", "아하", "오호", "오", "와", "그렇구나", "그랬구나", "그랬어", "그렇군", "알겠어", "좋아", "헐", "헉"]);
+
+function isFiller(text: string): boolean {
+  const bare = text.replace(/[^\p{L}\p{N}\s]/gu, "").replace(/\s+/g, " ").trim();
+  return bare.split(" ").every((w) => FILLER.has(w));
+}
+
 export function cleanReaction(raw: string): string | null {
   const r = normalize(raw);
   if (r.length === 0 || r.length > MAX_REACTION_LENGTH) return null;
+  if (isFiller(r)) return null;
   if (/[?？]/.test(r)) return null;
   if (countSentences(r) > 1) return null;
   if (containsForbidden(r)) return null;
