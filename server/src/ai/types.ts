@@ -9,6 +9,8 @@ export type QuestionInput = {
 };
 
 export type AiTurn = {
+  /** 질문 앞에 붙는 짧은 공감 한마디 (없으면 ""). 판단·조언·일기 문장은 아니다. */
+  reaction: string;
   /** 질문 1개 (1~2문장, 물음표로 끝남) */
   question: string;
   /** 단어 선택지 0~3개 */

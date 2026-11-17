@@ -48,7 +48,9 @@ async function logEventSafely(repo: Repository, type: Parameters<Repository["log
 
 async function askNext(repo: Repository, questioner: Questioner, session: Session, messages: Message[]) {
   const turn = await questioner.nextQuestion(toQuestionInput(session, messages));
-  const aiMessage = await repo.addMessage(session.id, "ai", turn.question);
+  // 공감 한마디와 질문을 한 메시지에 줄바꿈으로 저장 → 앱이 말풍선 여러 개로 나눠 보여 준다
+  const content = turn.reaction ? `${turn.reaction}\n${turn.question}` : turn.question;
+  const aiMessage = await repo.addMessage(session.id, "ai", content);
   return { aiMessage, choices: turn.choices };
 }
 

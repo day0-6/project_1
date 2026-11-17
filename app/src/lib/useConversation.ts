@@ -6,6 +6,13 @@ import { copy } from "./copy";
 import type { Message } from "./types";
 import { userMessageFor } from "./userMessage";
 
+/** 방금 시작한 대화인지: 시작 단어만 보냈고 1분이 안 지났다. 첫 AI 말풍선도 시간차로 보여 준다. */
+function isFresh(messages: Message[]): boolean {
+  const userCount = messages.filter((m) => m.role === "user").length;
+  const startedAt = messages[0] ? new Date(messages[0].created_at).getTime() : 0;
+  return userCount === 1 && Date.now() - startedAt < 60_000;
+}
+
 type LoadState = "loading" | "ready" | "failed" | "completed";
 
 export function useConversation(sessionId: string) {
@@ -72,5 +79,5 @@ export function useConversation(sessionId: string) {
     [sending, sessionId],
   );
 
-  return { load, seedWord, messages, choices, suggestFinish, sending, notice, send, retry: fetchConversation };
+  return { load, fresh: isFresh(messages), seedWord, messages, choices, suggestFinish, sending, notice, send, retry: fetchConversation };
 }

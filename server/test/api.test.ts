@@ -148,10 +148,21 @@ describe("소유권", () => {
 
 describe("AI 실패", () => {
   it("질문 생성기가 fallback을 주면 그대로 대화가 이어진다", async () => {
-    setup({ nextQuestion: async () => ({ question: "그 다음엔 어떻게 됐어?", choices: [], source: "fallback" }) });
+    setup({ nextQuestion: async () => ({ reaction: "", question: "그 다음엔 어떻게 됐어?", choices: [], source: "fallback" }) });
     const { session } = await startSession();
     const res = await request(app).post(`/sessions/${session.id}/messages`).set(A).send({ content: "응" });
     expect(res.status).toBe(201);
     expect(res.body.aiMessage.content).toBe("그 다음엔 어떻게 됐어?");
+  });
+});
+
+describe("공감 한마디", () => {
+  it("공감과 질문을 줄바꿈으로 한 메시지에 저장하고, 초안에는 넣지 않는다", async () => {
+    setup({ nextQuestion: async () => ({ reaction: "헉 바빴겠다", question: "제일 정신없던 순간은 언제야?", choices: [], source: "gemini" }) });
+    const { session } = await startSession("학교");
+    const res = await request(app).post(`/sessions/${session.id}/messages`).set(A).send({ content: "동아리도 하고 바빴어" });
+    expect(res.body.aiMessage.content).toBe("헉 바빴겠다\n제일 정신없던 순간은 언제야?");
+    const draft = await request(app).get(`/sessions/${session.id}/draft`).set(A);
+    expect(draft.body.draft).toBe("동아리도 하고 바빴어");
   });
 });

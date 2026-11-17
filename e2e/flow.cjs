@@ -33,17 +33,20 @@ const log = (...a) => console.log('✓', ...a);
     log('세션 시작, 첫 질문에 시작 단어 반영');
 
     // 3. 꼬리물기 3턴 (한 번은 선택지 탭)
+    // AI 말풍선이 다 나올 때까지 ("입력 중" 점 세 개가 사라질 때까지) 기다린다
+    const idle = () => p.waitForFunction(() => !document.querySelector('[aria-label="입력 중"]'));
+    await idle();
     const answer = async (t) => {
       await p.getByLabel('한 마디만 적어도 돼').fill(t);
       await p.getByRole('button', { name: '보내기' }).click();
       await p.getByText(t, { exact: true }).waitFor();
-      await p.waitForFunction(() => !document.body.innerText.includes('…'));
+      await idle();
     };
     // 선택지(최대 3개) 중 첫 번째를 탭
-    const chips = p.locator('[role=button]:visible').filter({ hasNotText: /보내기|여기까지 할래/ });
+    const chips = p.locator('[role=button]:visible:not([aria-label="뒤로"])').filter({ hasNotText: /보내기|여기까지 할래/ });
     const chip = (await chips.first().innerText()).trim();
     await chips.first().click();
-    await p.waitForFunction(() => !document.body.innerText.includes('…'));
+    await idle();
     await p.waitForTimeout(300);
     await answer('손님이 엄청 많았어');
     await answer('사장님이 커피를 사 줬어');

@@ -22,7 +22,7 @@ const make = (generate: GenerateFn, timeoutMs = 1000) =>
 describe("GeminiQuestioner", () => {
   it("규칙에 맞는 응답은 그대로", async () => {
     const q = make(async () => JSON.stringify({ question: "손님 중에 기억나는 사람 있어?", choices: ["있어", "없어"] }));
-    expect(await q.nextQuestion(input)).toEqual({ question: "손님 중에 기억나는 사람 있어?", choices: ["있어", "없어"], source: "gemini" });
+    expect(await q.nextQuestion(input)).toEqual({ reaction: "", question: "손님 중에 기억나는 사람 있어?", choices: ["있어", "없어"], source: "gemini" });
   });
 
   it("모델 이름은 설정값을 쓴다", async () => {

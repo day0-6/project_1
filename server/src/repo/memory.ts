@@ -12,9 +12,14 @@ export class MemoryStore {
   diaries: Diary[] = [];
   events: { user_id: string; type: EventType }[] = [];
   private clock = Date.parse("2026-11-10T00:00:00Z");
+  private realTime = false;
   now(): string {
-    this.clock += 1000;
+    this.clock = this.realTime ? Math.max(Date.now(), this.clock + 1) : this.clock + 1000;
     return new Date(this.clock).toISOString();
+  }
+  /** 데모 서버용: 시드를 넣은 뒤부터는 실제 시각을 쓴다. */
+  useRealTime(): void {
+    this.realTime = true;
   }
 }
 

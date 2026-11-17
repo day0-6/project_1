@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cleanChoice, cleanQuestion, sanitizeModelText, sanitizeTurn } from "../src/ai/sanitize.js";
+import { cleanChoice, cleanQuestion, cleanReaction, sanitizeModelText, sanitizeTurn } from "../src/ai/sanitize.js";
 
 describe("cleanQuestion: 질문 1개만 통과", () => {
   it.each([
@@ -46,15 +46,36 @@ describe("cleanChoice: 짧은 단어만", () => {
 describe("sanitizeTurn", () => {
   it("선택지는 최대 3개, 중복 제거, 부적합한 것만 버림", () => {
     const turn = sanitizeTurn({ question: "기분은 어땠어?", choices: ["좋음", "좋음", "피곤", "오늘은 좋았다.", "슬픔", "화남"] });
-    expect(turn).toEqual({ question: "기분은 어땠어?", choices: ["좋음", "피곤", "슬픔"] });
+    expect(turn).toEqual({ reaction: "", question: "기분은 어땠어?", choices: ["좋음", "피곤", "슬픔"] });
   });
   it("형식이 다르면 null", () => {
     expect(sanitizeTurn({ text: "어땠어?" })).toBeNull();
     expect(sanitizeTurn("어땠어?")).toBeNull();
   });
   it("모델 텍스트: JSON/코드펜스 파싱", () => {
-    expect(sanitizeModelText('```json\n{"question":"누구랑 갔어?","choices":[]}\n```')).toEqual({ question: "누구랑 갔어?", choices: [] });
+    expect(sanitizeModelText('```json\n{"question":"누구랑 갔어?","choices":[]}\n```')).toEqual({ reaction: "", question: "누구랑 갔어?", choices: [] });
     expect(sanitizeModelText("그냥 텍스트")).toBeNull();
     expect(sanitizeModelText(undefined)).toBeNull();
+  });
+});
+
+describe("cleanReaction: 짧은 공감 한마디만", () => {
+  it("짧은 공감은 통과", () => {
+    expect(cleanReaction("헉 진짜 정신없었겠다")).toBe("헉 진짜 정신없었겠다");
+    expect(cleanReaction("아 그랬구나 🥲")).toBe("아 그랬구나 🥲");
+  });
+  it("질문, 긴 글, 여러 문장, 조언·판단·일기 문장 제안은 버린다", () => {
+    expect(cleanReaction("그랬구나?")).toBeNull();
+    expect(cleanReaction("오늘 정말 많은 일이 있었구나. 수업도 듣고 동아리도 하고 바빴겠다")).toBeNull();
+    expect(cleanReaction("그랬구나. 힘들었겠다")).toBeNull();
+    expect(cleanReaction("오늘은 푹 쉬어야 해")).toBeNull();
+    expect(cleanReaction("잘했어 정말")).toBeNull();
+    expect(cleanReaction("이렇게 써 볼까")).toBeNull();
+  });
+  it("공감이 규칙에 안 맞으면 질문은 살리고 공감만 버린다", () => {
+    const turn = sanitizeTurn({ reaction: "푹 쉬는 게 좋아", question: "오늘 제일 바빴던 순간은 언제야?", choices: [] });
+    expect(turn).toEqual({ reaction: "", question: "오늘 제일 바빴던 순간은 언제야?", choices: [] });
+    const ok = sanitizeTurn({ reaction: "와 하루가 꽉 찼네", question: "동아리에선 뭐 했어?", choices: [] });
+    expect(ok?.reaction).toBe("와 하루가 꽉 찼네");
   });
 });

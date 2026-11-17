@@ -21,10 +21,20 @@ const FOLLOW_UP_QUESTIONS: ReadonlyArray<Preset> = [
   { question: "그중에 제일 오래 기억날 것 같은 건 뭐야?", choices: [] },
 ];
 
+/** 미리 정한 공감 한마디. 어떤 답에도 어색하지 않게 중립적으로. */
+const FIRST_REACTIONS = ["좋아 🙂", "오 그렇구나", "응응 알겠어"];
+const FOLLOW_UP_REACTIONS = ["그랬구나", "아하", "응응", "오호", "그랬어"];
+
 export type Rng = () => number;
 
 function askedQuestions(input: QuestionInput): Set<string> {
-  return new Set(input.history.filter((m) => m.role === "ai").map((m) => m.content));
+  return new Set(input.history.filter((m) => m.role === "ai").map((m) => questionOf(m.content)));
+}
+
+/** AI 메시지는 "공감\n질문" 형태로 저장된다. 마지막 줄이 질문이다. */
+export function questionOf(content: string): string {
+  const lines = content.split("\n").map((l) => l.trim()).filter(Boolean);
+  return lines[lines.length - 1] ?? content;
 }
 
 function answerCount(input: QuestionInput): number {
@@ -55,5 +65,7 @@ export function pickPresetQuestion(
   const presets = isFirst ? FIRST_QUESTIONS.map((f) => f(input.seedWord)) : [...FOLLOW_UP_QUESTIONS];
   const index = rng ? Math.floor(rng() * presets.length) : turn;
   const picked = pickUnused(presets, asked, index);
-  return { question: picked.question, choices: [...picked.choices], source };
+  const reactions = isFirst ? FIRST_REACTIONS : FOLLOW_UP_REACTIONS;
+  const reaction = reactions[Math.abs(index) % reactions.length] ?? "";
+  return { reaction, question: picked.question, choices: [...picked.choices], source };
 }

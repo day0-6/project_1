@@ -1,24 +1,29 @@
-import { router, Stack, useLocalSearchParams } from "expo-router";
-import { useRef, useState } from "react";
-import { FlatList, Platform, StyleSheet, Text, View } from "react-native";
-import { Bubble } from "@/components/Bubble";
-import { Button } from "@/components/Button";
+import { router, useLocalSearchParams } from "expo-router";
+import { useMemo, useRef, useState } from "react";
+import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 import { Loading } from "@/components/Centered";
-import { ChoiceChips } from "@/components/ChoiceChips";
-import { Field } from "@/components/Field";
+import { DmBubble, TypingBubble } from "@/components/dm/DmBubble";
+import { DmComposer } from "@/components/dm/DmComposer";
+import { DmHeader } from "@/components/dm/DmHeader";
+import { QuickReplies } from "@/components/dm/QuickReplies";
+import { TypingDots } from "@/components/dm/TypingDots";
 import { Notice } from "@/components/Notice";
 import { Screen } from "@/components/Screen";
 import { copy } from "@/lib/copy";
-import { handleEnterToSend } from "@/lib/enterToSend";
-import { colors, font, space } from "@/lib/theme";
-import type { Message } from "@/lib/types";
+import { dm, formatChatTime, toDmLines, type DmLine } from "@/lib/dm";
 import { useConversation } from "@/lib/useConversation";
+import { useStaggeredReveal } from "@/lib/useStaggeredReveal";
 
 export default function ChatScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const c = useConversation(id);
   const [input, setInput] = useState("");
-  const list = useRef<FlatList<Message>>(null);
+  const list = useRef<FlatList<DmLine>>(null);
+
+  const lines = useMemo(() => toDmLines(c.messages), [c.messages]);
+  const { visible, revealing } = useStaggeredReveal(lines, c.load === "ready", c.fresh);
+  const typing = c.sending || revealing;
+  const startedAt = c.messages[0]?.created_at;
 
   async function send(text: string) {
     if (!text.trim() || c.sending) return;
@@ -28,10 +33,11 @@ export default function ChatScreen() {
   }
 
   const finish = () => router.push({ pathname: "/edit/[id]", params: { id } });
+  const scrollToEnd = () => list.current?.scrollToEnd({ animated: true });
 
   return (
-    <Screen padded={false}>
-      <Stack.Screen options={{ title: c.seedWord }} />
+    <Screen padded={false} background={dm.background}>
+      <DmHeader subtitle={c.seedWord ? `'${c.seedWord}' 이야기 중` : "질문만 하는 친구"} />
       {c.load === "loading" ? <Loading /> : null}
       {c.load === "failed" ? (
         <View style={styles.center}>
@@ -47,54 +53,51 @@ export default function ChatScreen() {
         <>
           <FlatList
             ref={list}
-            data={c.messages}
-            keyExtractor={(m) => m.id}
-            renderItem={({ item }) => <Bubble role={item.role} content={item.content} />}
+            data={visible}
+            keyExtractor={(l) => l.key}
+            renderItem={({ item }) => <DmBubble line={item} />}
             contentContainerStyle={styles.list}
-            onContentSizeChange={() => list.current?.scrollToEnd({ animated: true })}
+            onContentSizeChange={scrollToEnd}
             onLayout={() => list.current?.scrollToEnd({ animated: false })}
-            ListFooterComponent={c.sending ? <Text style={styles.thinking}>{copy.thinking}</Text> : undefined}
+            ListHeaderComponent={startedAt ? <Text style={styles.time}>{formatChatTime(startedAt)}</Text> : undefined}
+            ListFooterComponent={
+              typing ? (
+                <TypingBubble>
+                  <TypingDots />
+                </TypingBubble>
+              ) : undefined
+            }
           />
           <View style={styles.bottom}>
             {c.notice ? <Notice message={c.notice} /> : null}
-            {c.suggestFinish && !c.sending ? <Text style={styles.hint}>{copy.finishHint}</Text> : null}
-            <ChoiceChips choices={c.choices} onPick={send} disabled={c.sending} />
-            <View style={styles.row}>
-              <Field
-                value={input}
-                onChangeText={setInput}
-                placeholder={copy.answerPlaceholder}
-                maxLength={2000}
-                multiline
-                accessibilityLabel={copy.answerPlaceholder}
-                style={styles.input}
-                onSubmitEditing={() => send(input)}
-                onKeyPress={Platform.OS === "web" ? (e) => handleEnterToSend(e, () => send(input)) : undefined}
-                submitBehavior="submit"
-                returnKeyType="send"
-              />
-              <Button label={copy.send} onPress={() => send(input)} disabled={!input.trim() || c.sending} />
-            </View>
+            {!typing ? <QuickReplies choices={c.choices} onPick={send} disabled={c.sending} /> : null}
+            {c.suggestFinish && !typing ? <Text style={styles.hint}>{copy.finishHint}</Text> : null}
+            <DmComposer value={input} onChange={setInput} onSend={() => send(input)} disabled={c.sending} />
           </View>
         </>
       ) : null}
       {/* "여기까지 할래"는 어떤 상태에서도 보인다 */}
       {c.load !== "completed" ? (
-        <View style={styles.finish}>
-          <Button label={copy.finish} variant="quiet" onPress={finish} disabled={c.sending || c.load !== "ready"} />
-        </View>
+        <Pressable
+          accessibilityRole="button"
+          onPress={finish}
+          disabled={c.sending || c.load !== "ready"}
+          style={({ pressed }) => [styles.finish, pressed && styles.finishPressed]}
+        >
+          <Text style={styles.finishLabel}>{copy.finish}</Text>
+        </Pressable>
       ) : null}
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  center: { flex: 1, justifyContent: "center", paddingHorizontal: space.lg },
-  list: { paddingHorizontal: space.md, paddingVertical: space.md },
-  thinking: { color: colors.faint, fontSize: font.question, paddingHorizontal: space.sm },
-  bottom: { paddingHorizontal: space.md, paddingTop: space.sm, borderTopWidth: 1, borderTopColor: colors.border },
-  hint: { color: colors.subtle, fontSize: font.small, marginBottom: space.sm },
-  row: { flexDirection: "row", gap: space.sm, alignItems: "flex-end" },
-  input: { flex: 1, minWidth: 0, maxHeight: 120 },
-  finish: { paddingHorizontal: space.md, paddingVertical: space.sm },
+  center: { flex: 1, justifyContent: "center", paddingHorizontal: 24 },
+  list: { paddingHorizontal: 12, paddingTop: 12, paddingBottom: 4 },
+  time: { textAlign: "center", color: dm.meta, fontSize: 12, marginBottom: 14, fontWeight: "500" },
+  bottom: { paddingHorizontal: 12, paddingTop: 6 },
+  hint: { color: dm.meta, fontSize: 13, textAlign: "center", marginBottom: 8 },
+  finish: { alignSelf: "center", marginVertical: 8, paddingHorizontal: 16, paddingVertical: 6, borderRadius: 999 },
+  finishPressed: { backgroundColor: dm.aiBubble },
+  finishLabel: { color: dm.link, fontSize: 14, fontWeight: "600" },
 });

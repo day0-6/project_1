@@ -6,6 +6,7 @@ import { z } from "zod";
  */
 
 export const MAX_QUESTION_LENGTH = 80;
+export const MAX_REACTION_LENGTH = 30;
 export const MAX_CHOICES = 3;
 export const MAX_CHOICE_LENGTH = 8;
 
@@ -18,7 +19,7 @@ const WRITING_FOR_USER = [
 ];
 
 /** 판단·조언 표현 */
-const ADVICE = ["하는 게 좋", "하는게 좋", "하면 좋겠", "추천", "잘못", "잘했어", "괜찮을 거야"];
+const ADVICE = ["는 게 좋", "는게 좋", "힘내", "화이팅", "파이팅", "하면 좋겠", "추천", "잘못", "잘했어", "괜찮을 거야"];
 /** "-아/어/여야 해/돼/겠" (쉬어야 해, 해야 돼 등) */
 const ADVICE_PATTERN = /[아어여해]야\s?(해|돼|되|한다|겠)/;
 
@@ -28,11 +29,12 @@ const MEDICAL = ["치료", "진단", "증상", "장애", "우울증", "불안장
 const FORBIDDEN = [...WRITING_FOR_USER, ...ADVICE, ...MEDICAL];
 
 const RawTurn = z.object({
+  reaction: z.string().optional(),
   question: z.string(),
   choices: z.array(z.string()).optional(),
 });
 
-export type CleanTurn = { question: string; choices: string[] };
+export type CleanTurn = { reaction: string; question: string; choices: string[] };
 
 function containsForbidden(text: string): boolean {
   return ADVICE_PATTERN.test(text) || FORBIDDEN.some((phrase) => text.includes(phrase));
@@ -61,6 +63,19 @@ export function cleanQuestion(raw: string): string | null {
   return q;
 }
 
+/**
+ * 공감 한마디. 질문이 아니고(물음표 없음), 짧고, 금지 표현이 없어야 한다.
+ * 규칙에 안 맞으면 질문은 살리고 공감만 버린다.
+ */
+export function cleanReaction(raw: string): string | null {
+  const r = normalize(raw);
+  if (r.length === 0 || r.length > MAX_REACTION_LENGTH) return null;
+  if (/[?？]/.test(r)) return null;
+  if (countSentences(r) > 1) return null;
+  if (containsForbidden(r)) return null;
+  return r;
+}
+
 export function cleanChoice(raw: string): string | null {
   const c = normalize(raw);
   if (c.length === 0 || c.length > MAX_CHOICE_LENGTH) return null;
@@ -78,7 +93,8 @@ export function sanitizeTurn(raw: unknown): CleanTurn | null {
   if (!question) return null;
   const choices = [...new Set((parsed.data.choices ?? []).map(cleanChoice).filter((c): c is string => c !== null))]
     .slice(0, MAX_CHOICES);
-  return { question, choices };
+  const reaction = parsed.data.reaction ? (cleanReaction(parsed.data.reaction) ?? "") : "";
+  return { reaction, question, choices };
 }
 
 /** 모델이 낸 텍스트(JSON 기대)를 파싱 + 검사 */

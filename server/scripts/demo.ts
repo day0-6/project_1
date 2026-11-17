@@ -123,6 +123,7 @@ const authenticate: Authenticator = async (token) => {
 
 const demoUser = createUser("demo@hanmadi.app", "hanmadi");
 await seedDemoData(new MemoryRepository(store, demoUser.id));
+store.useRealTime();
 
 createApp({ authenticate, questioner: new MockQuestioner(), corsOrigins: APP_ORIGINS }).listen(API_PORT, () => {
   console.log(`[demo] API     http://localhost:${API_PORT}  (메모리 저장소 + MOCK_AI)`);
