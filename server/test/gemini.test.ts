@@ -118,3 +118,37 @@ describe("미리 정한 질문", () => {
     expect(turn.question).not.toContain("'");
   });
 });
+
+describe("모델 여러 개", () => {
+  it("붐비거나(503) 없는 모델(404)이면 다음 모델로 넘어간다", async () => {
+    const tried: string[] = [];
+    const q = new GeminiQuestioner({
+      model: "busy-model, gone-model, ok-model",
+      timeoutMs: 1000,
+      rng: () => 0,
+      log: silent,
+      generate: async ({ model }) => {
+        tried.push(model);
+        if (model === "busy-model") throw new ApiError({ message: "busy", status: 503 });
+        if (model === "gone-model") throw new ApiError({ message: "gone", status: 404 });
+        return JSON.stringify({ reaction: "와 정신없었겠다", question: "동아리에선 뭐 했어?", choices: [] });
+      },
+    });
+    const turn = await q.nextQuestion(input);
+    expect(tried).toEqual(["busy-model", "gone-model", "ok-model"]);
+    expect(turn).toMatchObject({ source: "gemini", reaction: "와 정신없었겠다" });
+  });
+
+  it("모두 실패하면 미리 정한 질문", async () => {
+    const q = new GeminiQuestioner({
+      model: "a,b",
+      timeoutMs: 1000,
+      rng: () => 0,
+      log: silent,
+      generate: async () => {
+        throw new ApiError({ message: "busy", status: 503 });
+      },
+    });
+    expect((await q.nextQuestion(input)).source).toBe("fallback");
+  });
+});

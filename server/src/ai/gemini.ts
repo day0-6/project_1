@@ -15,7 +15,7 @@ export function createGenaiGenerate(apiKey: string): GenerateFn {
   const ai = new GoogleGenAI({ apiKey });
   // 짧은 질문 하나라 깊게 생각할 필요가 없다. Gemini 3 이상은 생각을 최소로 해서 빨리 답하게 한다.
   // 모델이 이 설정을 거부(400)하면 그다음부터는 빼고 보낸다.
-  let minimalThinking = true;
+  const noThinkingConfig = new Set<string>();
   const call = (model: string, prompt: string, signal: AbortSignal, thinking: boolean) =>
     ai.models.generateContent({
       model,
@@ -31,13 +31,13 @@ export function createGenaiGenerate(apiKey: string): GenerateFn {
       },
     });
   return async ({ model, prompt, signal }) => {
-    const thinking = minimalThinking && /^gemini-[3-9]/.test(model);
+    const thinking = !noThinkingConfig.has(model) && /^gemini-[3-9]/.test(model);
     try {
       return (await call(model, prompt, signal, thinking)).text;
     } catch (err) {
       if (!(thinking && err instanceof ApiError && err.status === 400)) throw err;
-      minimalThinking = false;
-      console.warn("[ai] 이 모델은 생각 최소화 설정을 받지 않아서 빼고 다시 보냄");
+      noThinkingConfig.add(model);
+      console.warn(`[ai] ${model}은 생각 최소화 설정을 받지 않아서 빼고 다시 보냄`);
       return (await call(model, prompt, signal, false)).text;
     }
   };
@@ -49,23 +49,44 @@ export class GeminiQuestioner implements Questioner {
   constructor(private readonly opts: Options) {}
 
   async nextQuestion(input: QuestionInput): Promise<AiTurn> {
-    const { model, timeoutMs, generate, rng = Math.random, log = console.warn } = this.opts;
+    const { rng = Math.random, log = console.warn } = this.opts;
+    const prompt = buildPrompt(input);
+    for (const model of modelList(this.opts.model)) {
+      const result = await this.tryModel(model, prompt, log);
+      if (result === "next") continue; // 붐빔(503)·한도(429)·없음(404) → 다음 모델
+      if (result) return result;
+      break;
+    }
+    return pickPresetQuestion(input, "fallback", rng);
+  }
+
+  /** 성공하면 질문, 다음 모델을 써 볼 만하면 "next", 그 밖의 실패는 null */
+  private async tryModel(model: string, prompt: string, log: (msg: string) => void): Promise<AiTurn | "next" | null> {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    const timer = setTimeout(() => controller.abort(), this.opts.timeoutMs);
     try {
-      const text = await generate({ model, prompt: buildPrompt(input), signal: controller.signal });
+      const text = await this.opts.generate({ model, prompt, signal: controller.signal });
       const clean = sanitizeModelText(text);
       if (clean) return { ...clean, source: "gemini" };
       log("[ai] 응답이 질문 규칙에 맞지 않아 미리 정한 질문으로 대체");
+      return null;
     } catch (err) {
       // 429, 네트워크 오류, 타임아웃 등 — 사용자에게는 에러를 보이지 않는다
       const status = err instanceof ApiError ? err.status : controller.signal.aborted ? "timeout" : "network";
       // 구글 오류 설명은 설정 문제를 알려 줄 뿐 사용자 글은 담지 않는다. 길면 자른다.
-      const reason = err instanceof ApiError ? ` ${err.message.slice(0, 200)}` : "";
-      log(`[ai] Gemini 호출 실패(${status})${reason} — 미리 정한 질문으로 대체`);
+      const reason = err instanceof ApiError ? ` ${err.message.slice(0, 160)}` : "";
+      log(`[ai] ${model} 호출 실패(${status})${reason}`);
+      return typeof status === "number" && RETRY_NEXT.has(status) ? "next" : null;
     } finally {
       clearTimeout(timer);
     }
-    return pickPresetQuestion(input, "fallback", rng);
   }
+}
+
+/** 다음 모델로 넘어가 볼 오류: 없는 모델, 한도 초과, 붐빔 */
+const RETRY_NEXT = new Set([404, 429, 500, 503]);
+
+/** GEMINI_MODEL은 쉼표로 여러 개 적을 수 있다. 앞에서부터 차례로 시도한다. */
+export function modelList(value: string): string[] {
+  return value.split(",").map((m) => m.trim()).filter(Boolean);
 }
