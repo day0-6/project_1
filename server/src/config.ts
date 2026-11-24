@@ -14,6 +14,7 @@ const EnvSchema = z
     GEMINI_API_KEY: z.string().optional(),
     GEMINI_MODEL: z.string().optional(),
     AI_TIMEOUT_MS: z.coerce.number().int().positive().default(8000),
+    AI_DRAFT_RETRIES: z.coerce.number().int().min(0).max(3).default(0),
     CORS_ORIGINS: z.string().optional(),
   })
   .superRefine((env, ctx) => {
@@ -30,7 +31,7 @@ export type Config = {
   port: number;
   supabaseUrl: string;
   supabaseAnonKey: string;
-  ai: { mock: true } | { mock: false; apiKey: string; model: string; timeoutMs: number };
+  ai: { mock: true } | { mock: false; apiKey: string; model: string; timeoutMs: number; draftRetries: number };
   corsOrigins: string[];
 };
 
@@ -52,6 +53,7 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): Config {
           apiKey: env.GEMINI_API_KEY ?? "",
           model: env.GEMINI_MODEL ?? "",
           timeoutMs: env.AI_TIMEOUT_MS,
+          draftRetries: env.AI_DRAFT_RETRIES,
         },
     corsOrigins: (env.CORS_ORIGINS ?? "")
       .split(",")

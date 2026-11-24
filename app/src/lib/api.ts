@@ -1,7 +1,7 @@
 import { ApiError, kindFromStatus, messageFromBody } from "./apiError";
 import { config } from "./config";
 import { supabase } from "./supabase";
-import type { Conversation, Diary, Session, SessionStatus, SessionSummary, Turn } from "./types";
+import type { Conversation, Diary, DraftSuggestion, Session, SessionStatus, SessionSummary, Turn } from "./types";
 
 const TIMEOUT_MS = 20000;
 
@@ -45,7 +45,8 @@ export const api = {
   getSession: (id: string) => request<Omit<Conversation, "choices">>("GET", `/sessions/${id}`),
   resumeSession: (id: string) => request<Conversation>("POST", `/sessions/${id}/resume`),
   sendMessage: (id: string, content: string) => request<Turn>("POST", `/sessions/${id}/messages`, { content }),
-  getDraft: (id: string) => request<{ seedWord: string; draft: string }>("GET", `/sessions/${id}/draft`),
+  getSuggestion: (id: string) =>
+    request<{ seedWord: string; draft: DraftSuggestion }>("POST", `/sessions/${id}/suggestion`),
   complete: (id: string, content: string) =>
     request<{ diary: Diary }>("POST", `/sessions/${id}/complete`, { content }),
   listSessions: (status?: SessionStatus) =>

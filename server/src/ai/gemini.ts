@@ -9,6 +9,10 @@ export type GenerateFn = (args: {
   model: string;
   prompt: string;
   signal: AbortSignal;
+  /** 생략하면 질문용 설정 (SYSTEM_INSTRUCTION, RESPONSE_JSON_SCHEMA, 0.8) */
+  systemInstruction?: string;
+  responseJsonSchema?: object;
+  temperature?: number;
 }) => Promise<string | undefined>;
 
 export function createGenaiGenerate(apiKey: string): GenerateFn {
@@ -16,29 +20,31 @@ export function createGenaiGenerate(apiKey: string): GenerateFn {
   // 짧은 질문 하나라 깊게 생각할 필요가 없다. Gemini 3 이상은 생각을 최소로 해서 빨리 답하게 한다.
   // 모델이 이 설정을 거부(400)하면 그다음부터는 빼고 보낸다.
   const noThinkingConfig = new Set<string>();
-  const call = (model: string, prompt: string, signal: AbortSignal, thinking: boolean) =>
+  type Args = Parameters<GenerateFn>[0];
+  const call = ({ model, prompt, signal, systemInstruction, responseJsonSchema, temperature }: Args, thinking: boolean) =>
     ai.models.generateContent({
       model,
       contents: prompt,
       config: {
-        systemInstruction: SYSTEM_INSTRUCTION,
+        systemInstruction: systemInstruction ?? SYSTEM_INSTRUCTION,
         responseMimeType: "application/json",
-        responseJsonSchema: RESPONSE_JSON_SCHEMA,
-        temperature: 0.8,
+        responseJsonSchema: responseJsonSchema ?? RESPONSE_JSON_SCHEMA,
+        temperature: temperature ?? 0.8,
         maxOutputTokens: 2048,
         ...(thinking ? { thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL } } : {}),
         abortSignal: signal,
       },
     });
-  return async ({ model, prompt, signal }) => {
+  return async (args) => {
+    const { model } = args;
     const thinking = !noThinkingConfig.has(model) && /^gemini-[3-9]/.test(model);
     try {
-      return (await call(model, prompt, signal, thinking)).text;
+      return (await call(args, thinking)).text;
     } catch (err) {
       if (!(thinking && err instanceof ApiError && err.status === 400)) throw err;
       noThinkingConfig.add(model);
       console.warn(`[ai] ${model}은 생각 최소화 설정을 받지 않아서 빼고 다시 보냄`);
-      return (await call(model, prompt, signal, false)).text;
+      return (await call(args, false)).text;
     }
   };
 }

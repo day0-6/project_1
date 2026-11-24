@@ -1,6 +1,6 @@
 # 한 마디 — 회피형 ADHD를 위한 일기장
 
-> 한 단어로 시작하면 AI는 **질문만** 던지고, 일기는 **내 문장으로** 완성한다.
+> 한 단어로 시작하면 AI는 **질문만** 던지고, 일기는 **내가 한 말로만** 완성한다.
 
 멋쟁이사자처럼 14기 개인 과제.
 
@@ -11,14 +11,14 @@ AI   '알바' 하면 오늘 어떤 장면이 떠올라?
 나   손님이 엄청 많았어
 AI   그때 누가 옆에 있었어?        [혼자] [친구] [가족]
 ...                                  [여기까지 할래]
-→ 내 답변을 이어 붙인 초안을 내가 직접 다듬어 저장
+→ AI가 내 답변만으로 정리한 초안을 내가 직접 다듬어 저장
 ```
 
 ## 절대 원칙과 코드 위치
 
 | 원칙 | 어떻게 지키나 | 코드 |
 | --- | --- | --- |
-| 1. AI는 일기 문장을 대신 쓰지 않는다 | AI는 **짧은 공감 한마디(30자, 물음표 없음) + 질문 1개**만 보낸다. 대화 화면은 인스타 DM처럼 말풍선을 나눠 보여 준다. 시스템 프롬프트로 지시하고, 응답은 후처리로 다시 검사한다. 공감이 규칙에 어긋나면 공감만 버린다. 질문 1개(물음표 정확히 1개, 2문장·80자 이내)와 단어 선택지 3개 이하만 통과한다. "써 볼까", "예를 들어", 조언(`~해야 해`), 의료 표현이 있으면 버리고 미리 정해 둔 질문을 쓴다. 초안은 AI 없이 내 답만 이어 붙인다 | `server/src/ai/sanitize.ts`, `prompt.ts`, `lib/conversation.ts` |
+| 1. AI는 사용자가 하지 않은 말을 쓰지 않는다 | **대화 중**: AI는 **짧은 공감 한마디(30자, 물음표 없음) + 질문 1개**만 보낸다. 대화 화면은 인스타 DM처럼 말풍선을 나눠 보여 준다. 시스템 프롬프트로 지시하고, 응답은 후처리로 다시 검사한다. 공감이 규칙에 어긋나면 공감만 버린다. 질문 1개(물음표 정확히 1개, 2문장·80자 이내)와 단어 선택지 3개 이하만 통과한다. "써 볼까", "예를 들어", 조언(`~해야 해`), 의료 표현이 있으면 버리고 미리 정해 둔 질문을 쓴다. **대화가 끝나면**: AI가 내 답변만으로 초안을 정리한다. 순서 정리, "~했다" 문체, 연결어만 허용한다. 길이, 물음표, 문체, 새 단어 수를 검사해서 떨어지면 내 답을 이어 붙인 대체 초안을 쓴다 | `server/src/ai/sanitize.ts`, `prompt.ts`, `diaryDraft.ts` |
 | 2. 빈 화면 없음 | 모든 화면을 질문이나 입력칸으로 시작한다. 목록이 비어 있으면 질문과 시작 버튼을 보여 준다. 답이 하나도 없으면 시작 단어를 초안으로 쓴다 | `app/src/components/ListScreen.tsx`, `buildDraft` |
 | 3. 중간에 나가도 실패가 아니다 | 메시지는 보낼 때마다 서버에 저장한다. 저장 버튼이 없고, 미완성 세션은 보관함 '생각의 조각'에 남는다. 다듬던 글은 기기에 자동 보관한다 | `routes/sessions.ts`, `app/src/lib/localDraft.ts` |
 | 4. 스트릭 없음 | 연속 일수, "N일째", "N일 전" 같은 문구를 쓰지 않는다. 날짜는 `11월 10일` 형식으로만 쓴다 | `app/src/lib/copy.ts`, `format.ts` |
@@ -76,7 +76,8 @@ npm run dev
 | `SUPABASE_URL`, `SUPABASE_ANON_KEY` | 토큰 검증과 사용자 범위 DB 접근에 쓴다. service role 키는 필요 없다 |
 | `MOCK_AI` | 기본 `true`. Gemini를 호출하지 않고 미리 정해 둔 질문을 돌려준다 |
 | `GEMINI_API_KEY`, `GEMINI_MODEL` | `MOCK_AI=false`일 때 필수. 모델명은 코드에 하드코딩하지 않는다 |
-| `AI_TIMEOUT_MS` | 기본 8000. 시간이 넘으면 미리 정해 둔 질문을 쓴다 |
+| `AI_TIMEOUT_MS` | 기본 8000. 시간이 넘으면 미리 정해 둔 질문(초안은 대체 초안)을 쓴다 |
+| `AI_DRAFT_RETRIES` | 기본 0. 일기 초안이 검사에 떨어졌을 때 다시 시도하는 횟수. 429·네트워크 오류는 재시도하지 않는다 |
 | `CORS_ORIGINS` | Expo 웹 개발용 Origin |
 
 > **Gemini 비용과 데이터**: 개발 중에는 무료 티어를 쓰되 **실제 일기는 넣지 않는다.** 무료 티어 데이터는 구글 제품 개선에 쓰일 수 있다. 실사용자 테스트 전에 유료 Tier 1로 전환한다.
@@ -100,21 +101,21 @@ npm start
 | --- | --- | --- |
 | POST | `/sessions` `{ seedWord }` | 세션 생성 + 첫 질문 (`session_started`) |
 | POST | `/sessions/:id/messages` `{ content }` | 답을 즉시 저장 + 다음 질문 `{ userMessage, aiMessage, choices, suggestFinish }` |
-| GET | `/sessions/:id/draft` | 내 답변을 이어 붙인 초안 (AI 미사용) |
+| POST | `/sessions/:id/suggestion` | 일기 초안 `{ seedWord, draft: { content, source: "ai" \| "fallback" } }`. AI가 실패해도 200 + 대체 초안. `messages`에 `kind='suggestion'`으로 저장하고 `draft_generated` 이벤트에 `source`를 남긴다. 마지막 답 이후 만든 초안이 있으면 AI를 다시 부르지 않고 그 초안을 준다 |
 | POST | `/sessions/:id/complete` `{ content }` | 일기 저장 + `completed` (`diary_completed`, 한 트랜잭션) |
 | GET | `/sessions?status=in_progress` | 보관함 |
 | GET | `/sessions/:id` | 세션 + 메시지 |
 | POST | `/sessions/:id/resume` | 이어 하기 (`session_resumed`). 마지막이 내 답이면 질문을 새로 붙인다 |
 | GET | `/diaries`, `/diaries/:id` | 완성된 일기 |
 
-AI 호출이 실패하면(429, 네트워크 오류, 타임아웃, 규칙 위반 응답) 미리 정해 둔 질문 중 아직 안 한 것을 고른다. 사용자에게는 에러가 보이지 않는다.
+AI 호출이 실패하면(429, 네트워크 오류, 타임아웃, 규칙 위반 응답) 미리 정해 둔 질문 중 아직 안 한 것을 고른다. 일기 초안은 내 답을 이어 붙인 대체 초안을 쓴다. 사용자에게는 에러가 보이지 않는다.
 
 ## 테스트
 
 ```bash
 cd server && npm test
 ```
-API, 후처리, Gemini 실패 처리를 다루는 테스트 42개.
+API, 후처리, 일기 초안 검사, Gemini 실패 처리를 다루는 테스트.
 
 ```bash
 cd app && npm run typecheck
@@ -132,7 +133,7 @@ node e2e/flow.cjs
 
 ## 성공 지표
 
-`supabase/queries/metrics.sql`로 **시작 대비 완성 비율**을 본다. 일기 내용은 보지 않고 이벤트 수만 센다. 이 수치는 사용자에게 보여 주지 않는다 (원칙 4).
+`supabase/queries/metrics.sql`로 **시작 대비 완성 비율**과 **AI 초안 통과율**(`draft_generated`의 `source`)을 본다. 일기 내용은 보지 않고 이벤트 수만 센다. 이 수치는 사용자에게 보여 주지 않는다 (원칙 4).
 
 ## 개인정보
 

@@ -27,6 +27,9 @@ export type Diary = {
   seed_word: string;
 };
 
+/** 대화 종료 시 일기 초안. ai = 내 답을 일기 문체로 정리, fallback = 내 답을 이어 붙임 */
+export type DraftSuggestion = { content: string; source: "ai" | "fallback" };
+
 export type Conversation = {
   session: Session;
   messages: Message[];

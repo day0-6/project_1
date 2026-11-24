@@ -2,15 +2,16 @@
  * 메모리 저장소 — 테스트와 로컬 데모(scripts/demo.ts) 전용. 운영 서버(src/index.ts)에서는 쓰지 않는다.
  */
 import { randomUUID } from "node:crypto";
-import type { Diary, DiaryWithSeed, EventType, Message, MessageRole, Session, SessionStatus, SessionSummary } from "../domain.js";
+import type { Diary, DiaryWithSeed, DraftSource, EventType, Message, MessageRole, Session, SessionStatus, SessionSummary, Suggestion } from "../domain.js";
 import { SessionAlreadyCompletedError, type Authenticator, type Repository } from "./types.js";
 
 /** 테스트용 저장소. 사용자별로 걸러서 RLS를 흉내 낸다. */
 export class MemoryStore {
   sessions: Session[] = [];
   messages: Message[] = [];
+  suggestions: (Suggestion & { session_id: string })[] = [];
   diaries: Diary[] = [];
-  events: { user_id: string; type: EventType }[] = [];
+  events: { user_id: string; type: EventType; source?: DraftSource }[] = [];
   private clock = Date.parse("2026-11-10T00:00:00Z");
   private realTime = false;
   now(): string {
@@ -63,6 +64,19 @@ export class MemoryRepository implements Repository {
   async listMessages(sessionId: string) {
     return this.own(sessionId) ? this.store.messages.filter((m) => m.session_id === sessionId).map((m) => ({ ...m })) : [];
   }
+  async addSuggestion(sessionId: string, content: string, source: DraftSource): Promise<Suggestion> {
+    const s = this.own(sessionId);
+    if (!s) throw new Error("rls violation");
+    const suggestion = { session_id: sessionId, content, source, created_at: this.store.now() };
+    s.updated_at = suggestion.created_at;
+    this.store.suggestions.push(suggestion);
+    return { content, source, created_at: suggestion.created_at };
+  }
+  async latestSuggestion(sessionId: string): Promise<Suggestion | null> {
+    if (!this.own(sessionId)) return null;
+    const last = this.store.suggestions.filter((x) => x.session_id === sessionId).at(-1);
+    return last ? { content: last.content, source: last.source, created_at: last.created_at } : null;
+  }
   async completeSession(sessionId: string, content: string): Promise<Diary> {
     const s = this.own(sessionId);
     if (!s) throw new Error("session_not_found");
@@ -86,8 +100,8 @@ export class MemoryRepository implements Repository {
     const d = this.store.diaries.find((x) => x.id === id && x.user_id === this.userId);
     return d ? this.withSeed(d) : null;
   }
-  async logEvent(type: EventType) {
-    this.store.events.push({ user_id: this.userId, type });
+  async logEvent(type: EventType, source?: DraftSource) {
+    this.store.events.push({ user_id: this.userId, type, ...(source ? { source } : {}) });
   }
 }
 

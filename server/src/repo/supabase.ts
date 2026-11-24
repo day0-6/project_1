@@ -1,6 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { z } from "zod";
-import type { Diary, DiaryWithSeed, EventType, Message, MessageRole, Session, SessionStatus, SessionSummary } from "../domain.js";
+import type { Diary, DiaryWithSeed, DraftSource, EventType, Message, MessageRole, Session, SessionStatus, SessionSummary, Suggestion } from "../domain.js";
 import { SessionAlreadyCompletedError, type Authenticator, type Repository } from "./types.js";
 
 const SessionRow = z.object({
@@ -18,6 +18,11 @@ const MessageRow = z.object({
   content: z.string(),
   created_at: z.string(),
 });
+const SuggestionRow = z.object({
+  content: z.string(),
+  source: z.enum(["ai", "fallback"]),
+  created_at: z.string(),
+});
 const DiaryRow = z.object({
   id: z.string(),
   session_id: z.string(),
@@ -26,11 +31,14 @@ const DiaryRow = z.object({
   created_at: z.string(),
 });
 const SessionWithMessagesRow = SessionRow.extend({
-  messages: z.array(MessageRow.pick({ role: true, content: true, created_at: true })),
+  messages: z.array(MessageRow.pick({ role: true, content: true, created_at: true }).extend({ kind: z.string() })),
 });
 const DiaryWithSessionRow = DiaryRow.extend({
   sessions: z.object({ seed_word: z.string() }).nullable(),
 });
+
+/** API로 내보내는 메시지 칼럼 (kind·source는 서버 안에서만 쓴다) */
+const MESSAGE_COLUMNS = "id, session_id, role, content, created_at";
 
 /** 한 마디 테이블이 있는 Postgres 스키마 */
 export const DB_SCHEMA = "hanmadi";
@@ -76,7 +84,7 @@ export class SupabaseRepository implements Repository {
   async listSessions(status?: SessionStatus): Promise<SessionSummary[]> {
     let query = this.db
       .from("sessions")
-      .select("*, messages(role, content, created_at)")
+      .select("*, messages(role, kind, content, created_at)")
       .order("updated_at", { ascending: false })
       .limit(100);
     if (status) query = query.eq("status", status);
@@ -84,7 +92,7 @@ export class SupabaseRepository implements Repository {
     if (error) fail("listSessions", error);
     return z.array(SessionWithMessagesRow).parse(data).map(({ messages, ...session }) => {
       const answers = messages
-        .filter((m) => m.role === "user")
+        .filter((m) => m.role === "user" && m.kind === "chat")
         .sort((a, b) => a.created_at.localeCompare(b.created_at));
       return {
         ...session,
@@ -99,7 +107,7 @@ export class SupabaseRepository implements Repository {
     const { data, error } = await this.db
       .from("messages")
       .insert({ session_id: sessionId, role, content })
-      .select()
+      .select(MESSAGE_COLUMNS)
       .single();
     if (error) fail("addMessage", error);
     return MessageRow.parse(data);
@@ -108,11 +116,35 @@ export class SupabaseRepository implements Repository {
   async listMessages(sessionId: string): Promise<Message[]> {
     const { data, error } = await this.db
       .from("messages")
-      .select()
+      .select(MESSAGE_COLUMNS)
       .eq("session_id", sessionId)
+      .eq("kind", "chat")
       .order("created_at", { ascending: true });
     if (error) fail("listMessages", error);
     return z.array(MessageRow).parse(data);
+  }
+
+  async addSuggestion(sessionId: string, content: string, source: DraftSource): Promise<Suggestion> {
+    const { data, error } = await this.db
+      .from("messages")
+      .insert({ session_id: sessionId, role: "ai", kind: "suggestion", source, content })
+      .select("content, source, created_at")
+      .single();
+    if (error) fail("addSuggestion", error);
+    return SuggestionRow.parse(data);
+  }
+
+  async latestSuggestion(sessionId: string): Promise<Suggestion | null> {
+    const { data, error } = await this.db
+      .from("messages")
+      .select("content, source, created_at")
+      .eq("session_id", sessionId)
+      .eq("kind", "suggestion")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error) fail("latestSuggestion", error);
+    return data ? SuggestionRow.parse(data) : null;
   }
 
   async completeSession(sessionId: string, content: string): Promise<Diary> {
@@ -147,8 +179,8 @@ export class SupabaseRepository implements Repository {
     return data ? toDiaryWithSeed(DiaryWithSessionRow.parse(data)) : null;
   }
 
-  async logEvent(type: EventType): Promise<void> {
-    const { error } = await this.db.from("events").insert({ type });
+  async logEvent(type: EventType, source?: DraftSource): Promise<void> {
+    const { error } = await this.db.from("events").insert(source ? { type, source } : { type });
     if (error) fail("logEvent", error);
   }
 }

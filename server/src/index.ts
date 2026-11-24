@@ -1,4 +1,4 @@
-import { createQuestioner } from "./ai/index.js";
+import { createAi } from "./ai/index.js";
 import { createApp } from "./app.js";
 import { loadConfig } from "./config.js";
 import { createSupabaseAuthenticator } from "./repo/supabase.js";
@@ -6,7 +6,7 @@ import { createSupabaseAuthenticator } from "./repo/supabase.js";
 const config = loadConfig();
 const app = createApp({
   authenticate: createSupabaseAuthenticator(config.supabaseUrl, config.supabaseAnonKey),
-  questioner: createQuestioner(config.ai),
+  ...createAi(config.ai),
   corsOrigins: config.corsOrigins,
 });
 

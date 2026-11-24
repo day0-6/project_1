@@ -29,3 +29,12 @@ select
   count(*) filter (where e.type = 'session_started') as started,
   count(*) filter (where e.type = 'diary_completed') as completed
 from hanmadi.events e join resumed_users r using (user_id);
+
+-- 일기 초안: AI 초안이 검사를 얼마나 통과하는가 (나머지는 답변을 이어 붙인 대체 초안)
+-- MOCK_AI=true 기간에는 모두 fallback으로 잡힌다.
+select
+  count(*) filter (where source = 'ai')       as ai_drafts,
+  count(*) filter (where source = 'fallback') as fallback_drafts,
+  round(100.0 * count(*) filter (where source = 'ai') / nullif(count(*), 0), 1) as ai_pass_rate_pct
+from hanmadi.events
+where type = 'draft_generated';

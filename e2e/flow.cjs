@@ -64,9 +64,9 @@ const log = (...a) => console.log('✓', ...a);
     await p.unroute(API + '/**');
     await p.getByLabel('한 마디만 적어도 돼').fill('');
 
-    // 5. 여기까지 할래 → 초안 (AI 미사용, 내 답 이어 붙임)
+    // 5. 여기까지 할래 → 초안 (데모 서버는 MOCK_AI라 대체 초안 = 내 답 이어 붙임)
     await p.getByRole('button', { name: '여기까지 할래' }).click();
-    await p.getByText('네 답을 이어 붙였어').waitFor();
+    await p.getByText('네가 한 말을 모아봤어').waitFor();
     const draft = await p.getByLabel('일기 내용').inputValue();
     if (draft !== `${chip}\n손님이 엄청 많았어\n사장님이 커피를 사 줬어`) throw new Error('초안 불일치: ' + JSON.stringify(draft));
     log('초안 = 내 답변 그대로:', JSON.stringify(draft));

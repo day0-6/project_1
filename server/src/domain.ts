@@ -1,6 +1,7 @@
 export type SessionStatus = "in_progress" | "completed";
 export type MessageRole = "ai" | "user";
-export type EventType = "session_started" | "diary_completed" | "session_resumed";
+export type EventType = "session_started" | "diary_completed" | "session_resumed" | "draft_generated";
+export type DraftSource = "ai" | "fallback";
 
 export type Session = {
   id: string;
@@ -16,6 +17,13 @@ export type Message = {
   session_id: string;
   role: MessageRole;
   content: string;
+  created_at: string;
+};
+
+/** 대화 종료 시 만든 일기 초안. messages에 role='ai', kind='suggestion'으로 저장된다. */
+export type Suggestion = {
+  content: string;
+  source: DraftSource;
   created_at: string;
 };
 

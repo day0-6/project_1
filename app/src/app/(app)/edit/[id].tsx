@@ -11,6 +11,7 @@ import { api } from "@/lib/api";
 import { ApiError } from "@/lib/apiError";
 import { copy } from "@/lib/copy";
 import { localDraft } from "@/lib/localDraft";
+import type { DraftSuggestion } from "@/lib/types";
 import { colors, font, space } from "@/lib/theme";
 import { userMessageFor } from "@/lib/userMessage";
 
@@ -18,6 +19,7 @@ export default function EditScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const [text, setText] = useState<string | null>(null);
   const [seedWord, setSeedWord] = useState("");
+  const [source, setSource] = useState<DraftSuggestion["source"]>("fallback");
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
@@ -25,9 +27,11 @@ export default function EditScreen() {
   async function loadDraft() {
     setLoadFailed(false);
     try {
-      const [saved, server] = await Promise.all([localDraft.get(id), api.getDraft(id)]);
+      // 서버가 AI 실패도 대체 초안(200)으로 돌려주므로, 여기서 실패하는 건 연결 문제뿐이다
+      const [saved, server] = await Promise.all([localDraft.get(id), api.getSuggestion(id)]);
       setSeedWord(server.seedWord);
-      setText(saved ?? server.draft);
+      setSource(server.draft.source);
+      setText(saved ?? server.draft.content);
     } catch {
       setLoadFailed(true);
     }
@@ -79,7 +83,7 @@ export default function EditScreen() {
     <Screen>
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
         {seedWord ? <Text style={styles.seed}>{seedWord}</Text> : null}
-        <Question>{copy.editTitle}</Question>
+        <Question>{copy.editTitle[source]}</Question>
         <Field
           value={text}
           onChangeText={change}

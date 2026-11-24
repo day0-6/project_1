@@ -1,8 +1,9 @@
 import { Router } from "express";
 import { z } from "zod";
+import type { Drafter } from "../ai/diaryDraft.js";
 import type { Questioner } from "../ai/types.js";
-import { OPENING_QUESTION, type Message, type Session } from "../domain.js";
-import { buildDraft, shouldSuggestFinish, toQuestionInput } from "../lib/conversation.js";
+import { OPENING_QUESTION, type DraftSource, type Message, type Session } from "../domain.js";
+import { shouldSuggestFinish, toDraftInput, toQuestionInput } from "../lib/conversation.js";
 import { ctx, HttpError, idParam, notFound, parseBody } from "../lib/http.js";
 import { SessionAlreadyCompletedError, type Repository } from "../repo/types.js";
 
@@ -38,9 +39,9 @@ async function loadSession(repo: Repository, id: string): Promise<Session> {
 }
 
 /** 지표용 이벤트 기록은 실패해도 사용자 흐름을 막지 않는다 */
-async function logEventSafely(repo: Repository, type: Parameters<Repository["logEvent"]>[0]): Promise<void> {
+async function logEventSafely(repo: Repository, type: Parameters<Repository["logEvent"]>[0], source?: DraftSource): Promise<void> {
   try {
-    await repo.logEvent(type);
+    await repo.logEvent(type, source);
   } catch (err) {
     console.warn(`[events] ${type} 기록 실패`, err instanceof Error ? err.message : err);
   }
@@ -54,7 +55,26 @@ async function askNext(repo: Repository, questioner: Questioner, session: Sessio
   return { aiMessage, choices: turn.choices };
 }
 
-export function sessionsRouter(questioner: Questioner): Router {
+/**
+ * 일기 초안. 마지막 답 이후에 만든 초안이 있으면 그대로 쓴다 (다듬기 화면을 다시 열 때 AI를 또 부르지 않음).
+ * 저장·이벤트 기록이 실패해도 초안은 돌려준다.
+ */
+async function suggestDraft(repo: Repository, drafter: Drafter, session: Session, messages: Message[]) {
+  const lastAnswerAt = messages.filter((m) => m.role === "user").at(-1)?.created_at ?? "";
+  const saved = await repo.latestSuggestion(session.id).catch(() => null);
+  if (saved && saved.created_at > lastAnswerAt) return { content: saved.content, source: saved.source };
+
+  const draft = await drafter.draft(toDraftInput(session, messages));
+  try {
+    await repo.addSuggestion(session.id, draft.content, draft.source);
+  } catch (err) {
+    console.warn("[suggestion] 초안 저장 실패", err instanceof Error ? err.message : err);
+  }
+  await logEventSafely(repo, "draft_generated", draft.source);
+  return draft;
+}
+
+export function sessionsRouter(questioner: Questioner, drafter: Drafter): Router {
   const r = Router();
 
   // 세션 생성 + 첫 AI 질문
@@ -117,12 +137,14 @@ export function sessionsRouter(questioner: Questioner): Router {
     });
   });
 
-  // 초안: 사용자 답변을 이어 붙임 (AI 미사용)
-  r.get("/:id/draft", async (req, res) => {
+  // "여기까지 할래": 사용자 답변만으로 정리한 일기 초안. AI가 실패해도 200 + 대체 초안.
+  r.post("/:id/suggestion", async (req, res) => {
     const { repo } = ctx(req);
     const session = await loadSession(repo, idParam(req));
+    if (session.status === "completed") throw alreadyCompleted();
     const messages = await repo.listMessages(session.id);
-    res.json({ seedWord: session.seed_word, draft: buildDraft(session, messages) });
+    const draft = await suggestDraft(repo, drafter, session, messages);
+    res.json({ seedWord: session.seed_word, draft });
   });
 
   // 일기 저장 + completed

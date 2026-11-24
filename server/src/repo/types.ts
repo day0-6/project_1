@@ -1,4 +1,4 @@
-import type { Diary, DiaryWithSeed, EventType, Message, MessageRole, Session, SessionStatus, SessionSummary } from "../domain.js";
+import type { Diary, DiaryWithSeed, DraftSource, EventType, Message, MessageRole, Session, SessionStatus, SessionSummary, Suggestion } from "../domain.js";
 
 /**
  * 한 사용자로 범위가 고정된 데이터 접근 계층.
@@ -9,12 +9,16 @@ export interface Repository {
   getSession(id: string): Promise<Session | null>;
   listSessions(status?: SessionStatus): Promise<SessionSummary[]>;
   addMessage(sessionId: string, role: MessageRole, content: string): Promise<Message>;
+  /** 대화 메시지만 (kind='chat'). 일기 초안은 빠진다. */
   listMessages(sessionId: string): Promise<Message[]>;
+  addSuggestion(sessionId: string, content: string, source: DraftSource): Promise<Suggestion>;
+  latestSuggestion(sessionId: string): Promise<Suggestion | null>;
   /** 일기 저장 + completed 전환 + 이벤트 기록을 원자적으로 수행 */
   completeSession(sessionId: string, content: string): Promise<Diary>;
   listDiaries(): Promise<DiaryWithSeed[]>;
   getDiary(id: string): Promise<DiaryWithSeed | null>;
-  logEvent(type: EventType): Promise<void>;
+  /** source는 draft_generated에만 쓴다 */
+  logEvent(type: EventType, source?: DraftSource): Promise<void>;
 }
 
 export type AuthedContext = { userId: string; repo: Repository };

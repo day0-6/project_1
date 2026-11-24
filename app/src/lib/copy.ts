@@ -12,7 +12,7 @@ export const copy = {
   loadFailed: "잠깐 연결이 안 돼. 조금 뒤에 다시 해 볼까?",
   retry: "다시 해 보기",
 
-  editTitle: "네 답을 이어 붙였어. 마음대로 고쳐 봐.",
+  editTitle: { ai: "네가 한 말을 일기로 정리해 봤어. 고치고 싶은 데만 고쳐도 돼", fallback: "네가 한 말을 모아봤어. 고치고 싶은 데만 고쳐도 돼" },
   editPlaceholder: "한 줄이라도 괜찮아",
   save: "일기로 남기기",
   backToChat: "조금 더 이야기할래",

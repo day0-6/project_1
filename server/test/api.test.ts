@@ -1,5 +1,6 @@
 import request from "supertest";
 import { beforeEach, describe, expect, it } from "vitest";
+import type { Drafter } from "../src/ai/diaryDraft.js";
 import { MockQuestioner } from "../src/ai/mock.js";
 import type { Questioner } from "../src/ai/types.js";
 import { createApp } from "../src/app.js";
@@ -12,10 +13,12 @@ const B = { Authorization: "Bearer token-user-b" };
 let store: MemoryStore;
 let app: ReturnType<typeof createApp>;
 
-function setup(questioner: Questioner = new MockQuestioner()) {
+function setup(questioner: Questioner = new MockQuestioner(), drafter?: Drafter) {
   store = new MemoryStore();
-  app = createApp({ authenticate: memoryAuthenticator(store), questioner });
+  app = createApp({ authenticate: memoryAuthenticator(store), questioner, ...(drafter ? { drafter } : {}) });
 }
+
+const suggest = (id: string, auth = A) => request(app).post(`/sessions/${id}/suggestion`).set(auth);
 
 beforeEach(() => setup());
 
@@ -78,8 +81,9 @@ describe("대화 → 초안 → 완성", () => {
     const questions = store.messages.filter((m) => m.role === "ai").map((m) => m.content);
     expect(new Set(questions).size).toBe(questions.length);
 
-    const draft = await request(app).get(`/sessions/${session.id}/draft`).set(A);
-    expect(draft.body).toEqual({ seedWord: "알바", draft: answers.join("\n") });
+    const draft = await suggest(session.id);
+    expect(draft.status).toBe(200);
+    expect(draft.body).toEqual({ seedWord: "알바", draft: { content: answers.join("\n"), source: "fallback" } });
 
     const done = await request(app).post(`/sessions/${session.id}/complete`).set(A).send({ content: "오늘 알바는 바빴지만 뿌듯했다." });
     expect(done.status).toBe(201);
@@ -93,13 +97,80 @@ describe("대화 → 초안 → 완성", () => {
     expect(list.body.diaries).toHaveLength(1);
     const detail = await request(app).get(`/diaries/${done.body.diary.id}`).set(A);
     expect(detail.body.diary.content).toBe("오늘 알바는 바빴지만 뿌듯했다.");
-    expect(store.events.map((e) => e.type)).toEqual(["session_started", "diary_completed"]);
+    expect(store.events).toEqual([
+      { user_id: "user-a", type: "session_started" },
+      { user_id: "user-a", type: "draft_generated", source: "fallback" },
+      { user_id: "user-a", type: "diary_completed" },
+    ]);
   });
 
   it("답변이 없으면 초안은 시작 단어 (빈 화면 금지)", async () => {
     const { session } = await startSession("비");
-    const draft = await request(app).get(`/sessions/${session.id}/draft`).set(A);
-    expect(draft.body.draft).toBe("비");
+    const draft = await suggest(session.id);
+    expect(draft.body.draft).toEqual({ content: "비", source: "fallback" });
+  });
+});
+
+describe("POST /sessions/:id/suggestion", () => {
+  const aiDrafter = (content: string): Drafter & { calls: number } => {
+    const d = { calls: 0, draft: async () => (d.calls++, { content, source: "ai" as const }) };
+    return d;
+  };
+
+  it("AI 초안을 messages에 suggestion으로 저장하고 source를 이벤트에 남긴다", async () => {
+    const drafter = aiDrafter("손님이 엄청 많았다.");
+    setup(new MockQuestioner(), drafter);
+    const { session } = await startSession();
+    await request(app).post(`/sessions/${session.id}/messages`).set(A).send({ content: "손님이 엄청 많았어" });
+    const res = await suggest(session.id);
+    expect(res.status).toBe(200);
+    expect(res.body.draft).toEqual({ content: "손님이 엄청 많았다.", source: "ai" });
+    expect(store.suggestions).toMatchObject([{ session_id: session.id, content: "손님이 엄청 많았다.", source: "ai" }]);
+    expect(store.events.at(-1)).toEqual({ user_id: "user-a", type: "draft_generated", source: "ai" });
+  });
+
+  it("초안은 대화 기록·보관함·다음 질문에 섞이지 않는다", async () => {
+    setup(new MockQuestioner(), aiDrafter("손님이 많았다."));
+    const { session } = await startSession();
+    await request(app).post(`/sessions/${session.id}/messages`).set(A).send({ content: "손님이 많았어" });
+    await suggest(session.id);
+    const detail = await request(app).get(`/sessions/${session.id}`).set(A);
+    expect(detail.body.messages.map((m: { content: string }) => m.content)).not.toContain("손님이 많았다.");
+    const archive = await request(app).get("/sessions?status=in_progress").set(A);
+    expect(archive.body.sessions[0]).toMatchObject({ answer_count: 1, last_answer: "손님이 많았어" });
+  });
+
+  it("마지막 답 이후 다시 열면 저장된 초안을 쓰고, 답을 더 하면 새로 만든다", async () => {
+    const drafter = aiDrafter("손님이 많았다.");
+    setup(new MockQuestioner(), drafter);
+    const { session } = await startSession();
+    await request(app).post(`/sessions/${session.id}/messages`).set(A).send({ content: "손님이 많았어" });
+    await suggest(session.id);
+    await suggest(session.id);
+    expect(drafter.calls).toBe(1);
+    expect(store.events.filter((e) => e.type === "draft_generated")).toHaveLength(1);
+
+    await request(app).post(`/sessions/${session.id}/messages`).set(A).send({ content: "커피를 마셨어" });
+    await suggest(session.id);
+    expect(drafter.calls).toBe(2);
+  });
+
+  it("초안 저장이 실패해도 200과 초안", async () => {
+    setup(new MockQuestioner(), aiDrafter("손님이 많았다."));
+    const { session } = await startSession();
+    await request(app).post(`/sessions/${session.id}/messages`).set(A).send({ content: "손님이 많았어" });
+    store.suggestions.push = () => {
+      throw new Error("db down");
+    };
+    const res = await suggest(session.id);
+    expect(res.status).toBe(200);
+    expect(res.body.draft.source).toBe("ai");
+  });
+
+  it("완성한 세션은 409", async () => {
+    const { session } = await startSession();
+    await request(app).post(`/sessions/${session.id}/complete`).set(A).send({ content: "끝" });
+    expect((await suggest(session.id)).status).toBe(409);
   });
 });
 
@@ -137,7 +208,7 @@ describe("소유권", () => {
     const { session } = await startSession();
     expect((await request(app).get(`/sessions/${session.id}`).set(B)).status).toBe(404);
     expect((await request(app).post(`/sessions/${session.id}/messages`).set(B).send({ content: "hi" })).status).toBe(404);
-    expect((await request(app).get(`/sessions/${session.id}/draft`).set(B)).status).toBe(404);
+    expect((await suggest(session.id, B)).status).toBe(404);
     expect((await request(app).post(`/sessions/${session.id}/complete`).set(B).send({ content: "hi" })).status).toBe(404);
     expect((await request(app).get("/sessions").set(B)).body.sessions).toEqual([]);
   });
@@ -162,7 +233,7 @@ describe("공감 한마디", () => {
     const { session } = await startSession("학교");
     const res = await request(app).post(`/sessions/${session.id}/messages`).set(A).send({ content: "동아리도 하고 바빴어" });
     expect(res.body.aiMessage.content).toBe("헉 바빴겠다\n제일 정신없던 순간은 언제야?");
-    const draft = await request(app).get(`/sessions/${session.id}/draft`).set(A);
-    expect(draft.body.draft).toBe("동아리도 하고 바빴어");
+    const draft = await suggest(session.id);
+    expect(draft.body.draft.content).toBe("동아리도 하고 바빴어");
   });
 });
