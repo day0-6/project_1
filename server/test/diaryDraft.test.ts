@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildDraftPrompt,
   checkDraft,
+  DRAFT_SYSTEM_INSTRUCTION,
   fallbackDraft,
   GeminiDrafter,
   MockDrafter,
@@ -89,6 +90,18 @@ describe("fallbackDraft", () => {
   it("답변을 이어 붙이고, 없으면 시작 단어", () => {
     expect(fallbackDraft(input)).toEqual(FALLBACK);
     expect(fallbackDraft({ seedWord: "비", answers: [" "] })).toEqual({ content: "비", source: "fallback" });
+  });
+});
+
+describe("프롬프트 예시", () => {
+  it("예시 초안은 모두 검사를 통과한다 (모델이 따라 써도 탈락하지 않게)", () => {
+    const examples = [...DRAFT_SYSTEM_INSTRUCTION.matchAll(/답변: (.+)\n출력: (\{.+\})/g)];
+    expect(examples.length).toBeGreaterThanOrEqual(2);
+    for (const [, answerLine = "", output = ""] of examples) {
+      const answers = answerLine.split(" / ").map((a) => a.replace(/^\d+\. /, ""));
+      const draft = parseDraftText(output) ?? "";
+      expect(checkDraft(draft, { seedWord: "", answers })).toMatchObject({ ok: true });
+    }
   });
 });
 
