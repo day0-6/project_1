@@ -28,11 +28,14 @@ export default function ChatScreen() {
   async function send(text: string) {
     if (!text.trim() || c.sending) return;
     setInput("");
-    const ok = await c.send(text);
-    if (!ok) setInput(text); // 실패해도 쓴 글은 그대로
+    const result = await c.send(text);
+    if (!result) setInput(text); // 실패해도 쓴 글은 그대로
+    if (result === "stop") finish(); // "이제 그만해" → 더 묻지 않고 바로 다듬기
   }
 
-  const finish = () => router.push({ pathname: "/edit/[id]", params: { id } });
+  function finish() {
+    router.push({ pathname: "/edit/[id]", params: { id } });
+  }
   const scrollToEnd = () => list.current?.scrollToEnd({ animated: true });
 
   return (

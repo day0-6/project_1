@@ -3,7 +3,7 @@ import { z } from "zod";
 import type { Drafter } from "../ai/diaryDraft.js";
 import type { Questioner } from "../ai/types.js";
 import { OPENING_QUESTION, type DraftSource, type Message, type Session } from "../domain.js";
-import { shouldSuggestFinish, toDraftInput, toQuestionInput } from "../lib/conversation.js";
+import { isStopRequest, shouldSuggestFinish, toDraftInput, toQuestionInput } from "../lib/conversation.js";
 import { ctx, HttpError, idParam, notFound, parseBody } from "../lib/http.js";
 import { SessionAlreadyCompletedError, type Repository } from "../repo/types.js";
 
@@ -127,6 +127,11 @@ export function sessionsRouter(questioner: Questioner, drafter: Drafter): Router
     const { content } = parseBody(MessageBody, req);
     if (session.status === "completed") throw alreadyCompleted();
     const userMessage = await repo.addMessage(session.id, "user", content);
+    // "이제 그만해": 더 묻지 않는다. 앱이 바로 다듬기 화면으로 넘어간다.
+    if (isStopRequest(content)) {
+      res.status(201).json({ userMessage, aiMessage: null, choices: [], suggestFinish: true, stop: true });
+      return;
+    }
     const messages = await repo.listMessages(session.id);
     const { aiMessage, choices } = await askNext(repo, questioner, session, messages);
     res.status(201).json({
@@ -134,6 +139,7 @@ export function sessionsRouter(questioner: Questioner, drafter: Drafter): Router
       aiMessage,
       choices,
       suggestFinish: shouldSuggestFinish(messages),
+      stop: false,
     });
   });
 

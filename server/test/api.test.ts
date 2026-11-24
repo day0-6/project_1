@@ -111,6 +111,29 @@ describe("대화 → 초안 → 완성", () => {
   });
 });
 
+describe("그만하자는 답", () => {
+  it("질문하지 않고 stop을 돌려주고, 초안에는 넣지 않는다", async () => {
+    let asked = 0;
+    const mock = new MockQuestioner();
+    setup({ nextQuestion: (input) => (asked++, mock.nextQuestion(input)) });
+    const { session } = await startSession();
+    await request(app).post(`/sessions/${session.id}/messages`).set(A).send({ content: "손님이 많았어" });
+    const before = asked;
+    const res = await request(app).post(`/sessions/${session.id}/messages`).set(A).send({ content: "이제 그만해" });
+    expect(res.status).toBe(201);
+    expect(res.body).toMatchObject({ aiMessage: null, choices: [], suggestFinish: true, stop: true });
+    expect(res.body.userMessage.content).toBe("이제 그만해");
+    expect(asked).toBe(before);
+    expect((await suggest(session.id)).body.draft.content).toBe("손님이 많았어");
+  });
+  it("평소 답에는 stop: false", async () => {
+    const { session } = await startSession();
+    const res = await request(app).post(`/sessions/${session.id}/messages`).set(A).send({ content: "그만두고 싶었어" });
+    expect(res.body.stop).toBe(false);
+    expect(res.body.aiMessage.role).toBe("ai");
+  });
+});
+
 describe("POST /sessions/:id/suggestion", () => {
   const aiDrafter = (content: string): Drafter & { calls: number } => {
     const d = { calls: 0, draft: async () => (d.calls++, { content, source: "ai" as const }) };

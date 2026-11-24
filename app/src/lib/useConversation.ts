@@ -45,9 +45,9 @@ export function useConversation(sessionId: string) {
     void fetchConversation();
   }, [fetchConversation]);
 
-  /** 성공하면 true. 실패하면 false를 돌려주고 화면이 입력값을 되살린다. */
+  /** 성공하면 true, 그만하자는 답이면 "stop". 실패하면 false를 돌려주고 화면이 입력값을 되살린다. */
   const send = useCallback(
-    async (content: string): Promise<boolean> => {
+    async (content: string): Promise<boolean | "stop"> => {
       const text = content.trim();
       if (!text || sending) return false;
       const optimistic: Message = {
@@ -63,10 +63,11 @@ export function useConversation(sessionId: string) {
       setMessages((prev) => [...prev, optimistic]);
       try {
         const turn = await api.sendMessage(sessionId, text);
-        setMessages((prev) => [...prev.filter((m) => m.id !== optimistic.id), turn.userMessage, turn.aiMessage]);
+        const received = turn.aiMessage ? [turn.userMessage, turn.aiMessage] : [turn.userMessage];
+        setMessages((prev) => [...prev.filter((m) => m.id !== optimistic.id), ...received]);
         setChoices(turn.choices);
         setSuggestFinish(turn.suggestFinish);
-        return true;
+        return turn.stop ? "stop" : true;
       } catch (err) {
         setMessages((prev) => prev.filter((m) => m.id !== optimistic.id));
         if (err instanceof ApiError && err.kind === "conflict") setLoad("completed");

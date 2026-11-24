@@ -39,7 +39,10 @@ export type Conversation = {
 
 export type Turn = {
   userMessage: Message;
-  aiMessage: Message;
+  /** 사용자가 그만하자고 하면(stop) 질문이 없다 */
+  aiMessage: Message | null;
   choices: string[];
   suggestFinish: boolean;
+  /** "이제 그만해" 등 → 바로 다듬기 화면으로 */
+  stop: boolean;
 };

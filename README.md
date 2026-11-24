@@ -100,7 +100,7 @@ npm start
 | 메서드 | 경로 | 설명 |
 | --- | --- | --- |
 | POST | `/sessions` `{ seedWord }` | 세션 생성 + 첫 질문 (`session_started`) |
-| POST | `/sessions/:id/messages` `{ content }` | 답을 즉시 저장 + 다음 질문 `{ userMessage, aiMessage, choices, suggestFinish }` |
+| POST | `/sessions/:id/messages` `{ content }` | 답을 즉시 저장 + 다음 질문 `{ userMessage, aiMessage, choices, suggestFinish, stop }`. 답이 "이제 그만해" 같은 그만 요청이면 질문 없이 `aiMessage: null, stop: true` → 앱이 바로 다듬기로 |
 | POST | `/sessions/:id/suggestion` | 일기 초안 `{ seedWord, draft: { content, source: "ai" \| "fallback" } }`. AI가 실패해도 200 + 대체 초안. `messages`에 `kind='suggestion'`으로 저장하고 `draft_generated` 이벤트에 `source`를 남긴다. 마지막 답 이후 만든 초안이 있으면 AI를 다시 부르지 않고 그 초안을 준다 |
 | POST | `/sessions/:id/complete` `{ content }` | 일기 저장 + `completed` (`diary_completed`, 한 트랜잭션) |
 | GET | `/sessions?status=in_progress` | 보관함 |
