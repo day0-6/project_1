@@ -30,6 +30,12 @@ describe("checkDraft", () => {
     expect(res).toEqual({ ok: true, content: "손님이 엄청 많았다.\n\n사장님이 커피를 사 줬다." });
   });
 
+  it("문장 끝 '다' 앞의 띄어쓰기는 붙이고, 문장 안의 '다'(모두)는 그대로 둔다", () => {
+    const answers = ["기계소음 너무 시끄러워", "그냥 다 싫어", "자고 싶지"];
+    const res = checkDraft("기계소음이 너무 시끄러웠 다. 그냥 다 싫었다. 자고 싶었 다", { seedWord: "알바", answers });
+    expect(res).toEqual({ ok: true, content: "기계소음이 너무 시끄러웠다. 그냥 다 싫었다. 자고 싶었다" });
+  });
+
   it("물음표가 있으면 탈락", () => {
     expect(checkDraft("손님이 엄청 많았다. 왜 그렇게 많았을까?", input)).toMatchObject({ reason: "question" });
     expect(checkDraft("손님이 엄청 많았다？", input)).toMatchObject({ reason: "question" });
